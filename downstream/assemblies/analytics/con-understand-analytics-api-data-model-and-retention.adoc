@@ -16,7 +16,7 @@ The analytics API exposes per-collector feeds, not pre-joined tables. Each colle
 * No general organization filter is available in the API. Filter by organization in your BI tool after retrieving the data.
 * Complex multi-table joins and aggregations happen in your BI tool, not in the API.
 
-This design keeps API response times fast and predictable. {ControllerNameStart}-side cross-joins were tested and reverted due to performance impact on time-to-first-readable-response (metrics-utility PR #611, October 2026).
+This design keeps API response times fast and predictable by leaving cross-collector joins and aggregations to the BI tool.
 
 == Available collectors and organization fields
 

@@ -54,9 +54,10 @@ curl -H "Authorization: Bearer <your-token>" \
 
 IMPORTANT: Wait for collection to complete before querying data. Allow at least 1–2 minutes between the POST trigger and the GET query to account for collection processing time. For expected processing times by event volume, see Understand analytics API architecture and performance.
 
-*Task behavior:* Each POST creates a separate background task, even when
-the collector and requested bounds are identical. Concurrent requests are not
-deduplicated by the API view.
+*Task behavior:* Repeating a POST for the same collector and resolved window
+reuses the existing background task. Requests for different windows of the same
+collector can receive `409 Conflict` while another window is running. Use the
+returned `task_url` and `task_id` to monitor the task before querying the data.
 
 === Pattern 2: Metrics-service recurring task
 
@@ -90,15 +91,16 @@ curl -X POST \
 
 . Metrics service creates a child collection task on each cron fire.
 
-. Your BI tool queries the analytics GET endpoint after the task completes to retrieve fresh data.
+. Your BI tool queries the analytics GET endpoint after the task completes to retrieve fresh data. Creating the recurring task requires a System Administrator; a System Auditor can use the resulting schedule and read its reports but cannot create or remove the schedule.
 
 Use `collect_daily_metrics` with a daily collector or `collect_snapshot_metrics`
 with a snapshot collector. See xref:ref-analytics-api-reference[Analytics API reference] for the collector modes
 and default windows.
 
-=== Pattern 3: GET-based auto-trigger (POC only, not supported)
+=== Pattern 3: GET-based collection trigger (not supported)
 
-*Do not use this pattern in production.* A GET-based auto-trigger mechanism exists as a proof-of-concept (PR #450) but is not finalized or supported in AAP 2.7. Querying an empty collector endpoint does not automatically trigger collection in the current release.
+*Do not use this pattern in production.* Querying an empty collector endpoint
+does not automatically trigger collection. Use Pattern 1 or Pattern 2 instead.
 
 Use Pattern 1 (manual POST) or Pattern 2 (scheduled POST) instead.
 

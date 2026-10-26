@@ -123,21 +123,16 @@ Your BI tool is now connected to the analytics API and can query {ControllerName
 
 Configure your BI tool to refresh data on a schedule that aligns with the analytics collection window:
 
-. Determine the upstream {Analytics} collection interval (default:
-   4 hours). The analytics API also has per-collector hourly, daily, and
-   snapshot schedules. For details, see xref:ref-controller-analytics-gathering[Analytics gathering].
+   . Use the discovery response to determine whether each collector is hourly,
+      daily, or a snapshot. The analytics API provides per-collector collection
+      metadata; it is not governed by a single universal collection interval.
 
-. For upstream {Analytics} shipping, schedule the BI refresh at
-   least *1–2 minutes after the four-hour shipping window closes* to allow
-   processing to complete. For metrics-service API collectors, schedule
-   refreshes according to the collector mode and use `finished_at` or
-   `last_collect` to confirm freshness.
+   . Schedule BI refreshes according to the collector mode and use `finished_at`
+      or `last_collect` to confirm freshness after collection completes.
 
-. Do not assume that the upstream four-hour interval is the metrics-service
-   API schedule. The analytics API is batch-only; real-time streaming is not
-   supported.
+   . The analytics API is batch-oriented; real-time streaming is not supported.
 
-For collection timing and processing time details, see xref:ref-controller-analytics-gathering[Analytics gathering].
+For collection timing and processing details, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
 
 === Monitor for stale data
 

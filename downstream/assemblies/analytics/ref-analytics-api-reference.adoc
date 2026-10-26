@@ -5,7 +5,7 @@
 = Analytics API reference
 
 [role="_abstract"]
-The analytics API provides programmatic access to {ControllerName} analytics data through per-collector HTTP endpoints. Use this API to integrate {PlatformNameShort} analytics into external business intelligence (BI) tools such as Grafana, Power BI, Tableau, or ELK.
+The analytics API provides programmatic access to {ControllerName} analytics data through per-collector HTTP endpoints. Use this API to integrate {PlatformNameShort} analytics into external business intelligence (BI) or reporting tools.
 
 
 == Prerequisites
@@ -94,7 +94,63 @@ POST /api/metrics/v1/analytics/<collector-name>/collect/
 
 The discovery endpoint is the authoritative source for enabled collectors in this deployment. It returns each collector's name, description, data shape, mode, window support, last_collect, and the URLs for reading and triggering collection.
 
-The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. For detailed field schemas, see the metrics-service API specification and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. The API registry's `enabled` flag only makes a collector available; it does not enable collection by itself. No collector is collected automatically unless a built-in metrics-service task or another configured task uses it. See link:#scheduling-additional-collectors[Scheduling additional collectors] to configure recurring collection.
+
+The following collectors are collected automatically by the default metrics-service schedules:
+
+[options="header"]
+|===
+|Mode |Public collector |`collector_type`
+|Hourly |`controller.unified_jobs_dashboard` |`unified_jobs`
+|Hourly |`controller.job_host_summary_service` |`job_host_summary_service`
+|Hourly |`controller.credentials_service` |`credentials_service`
+|Hourly |`controller.main_jobevent_service` |`main_jobevent_service`
+|Snapshot |`controller.execution_environments` |`execution_environments`
+|Snapshot |`controller.config` |`config`
+|Snapshot |`controller.controller_version_service` |`controller_version_service`
+|Snapshot |`controller.table_metadata` |`table_metadata`
+|Snapshot |`controller.feature_flags_service` |`feature_flags_service`
+|Daily |`controller.main_indirectmanagednodeaudit` |`indirect_managed_nodes`
+|===
+
+The remaining enabled collectors can be collected on demand or added to a customer-created recurring task. Their task mappings are:
+
+[options="header"]
+|===
+|Mode |Public collector |`collector_type`
+|Hourly |`controller.unified_jobs` |`unified_jobs_base`
+|Hourly |`controller.job_host_summary` |`job_host_summary`
+|Hourly |`controller.main_jobevent` |`main_jobevent_legacy`
+|Hourly |`controller.events_table` |`events_table`
+|Hourly |`controller.workflow_job_node_table` |`workflow_job_node_table`
+|Hourly |`controller.query_info` |`query_info`
+|Snapshot |`controller.counts` |`counts`
+|Snapshot |`controller.cred_type_counts` |`cred_type_counts`
+|Snapshot |`controller.host_metric_summary_monthly_table` |`host_metric_summary_monthly_table`
+|Snapshot |`controller.instance_info` |`instance_info`
+|Snapshot |`controller.inventory_counts` |`inventory_counts`
+|Snapshot |`controller.org_counts` |`org_counts`
+|Snapshot |`controller.projects_by_scm_type` |`projects_by_scm_type`
+|Snapshot |`controller.unified_job_template_table` |`unified_job_template_table`
+|Snapshot |`controller.workflow_job_template_node_table` |`workflow_job_template_node_table`
+|Snapshot |`controller.main_host` |`main_host`
+|Daily |`controller.main_host_daily` |`main_host_daily`
+|Daily |`controller.main_hostmetric` |`main_hostmetric`
+|===
+
+Some host collectors also depend on database helper functions being available in the metrics-service deployment. The discovery response is authoritative for the collectors available in a particular deployment.
+
+For detailed field schemas, see the deployed OpenAPI schema and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+
+=== Understanding payload shape metadata
+
+The discovery response includes `payload_shape` and `key_field` to help clients interpret the nested `payload`:
+
+* `payload_shape: array` means that records are the items in the payload array.
+* `payload_shape: object` with a null `key_field` means that the object has fixed, collector-defined properties.
+* `payload_shape: object` with a `key_field` means that the top-level object keys identify records, and the record values contain the fields described by that key.
+
+Use these values instead of assuming that every collector returns a flat list of records.
 
 == Query parameters
 
@@ -141,7 +197,7 @@ The discovery endpoint reports last_collect for each collector. Each collection 
 
 == Triggering data collection
 
-System Administrators can queue an on-demand collection task by POSTing to a collector's `/collect/` endpoint. Each request returns HTTP 202 Accepted with a task_id and task_url:
+Authorized users can queue an on-demand collection task by POSTing to a collector's `/collect/` endpoint. The request is asynchronous and returns a task_id and task_url:
 
 [source,sh]
 ----
@@ -149,6 +205,17 @@ curl -X POST \
   -H "Authorization: Bearer <your-token>" \
   https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/collect/
 ----
+
+The trigger is idempotent for the resolved collector and collection window. Repeating a request for the same window reuses the existing task instead of queueing duplicate work. The response uses these statuses and dispositions:
+
+[options="header"]
+|===
+|Status |`disposition` |Meaning
+|`202` |`created` |A new collection task was queued.
+|`200` |`reused` |An existing pending, running, or completed task covers the window.
+|`202` |`requeued` |A failed or stale task was placed back in the queue.
+|`409` |not applicable |A different window for the same collector is already running. The response identifies the task that is in progress.
+|===
 
 === Trigger mechanisms
 
@@ -174,6 +241,44 @@ retention period. To request a different window, include explicit `since` and
 `until` values in the POST body.
 
 For collection lag and processing time details, see Understand analytics API architecture and performance.
+
+== Scheduling additional collectors
+
+Only System Administrators can create or manage recurring collection tasks. System Auditors can read analytics reports and task status, but cannot trigger a collection or create, update, or remove a recurring schedule. If an auditor needs an additional collector scheduled, ask a System Administrator to create the recurring task.
+
+To collect an enabled collector automatically at a customer-defined interval, a System Administrator can create a recurring task through the metrics-service task API. Use the mode-specific function and the collector's internal `collector_type` value:
+
+[source,http]
+----
+POST https://<gateway-hostname>/api/metrics/v1/tasks/schedule_recurring/
+----
+
+For example, to collect host metrics daily:
+
+[source,json]
+----
+{
+  "name": "collect-main-host-metrics",
+  "function_name": "collect_daily_metrics",
+  "task_data": {
+    "collector_type": "main_hostmetric"
+  },
+  "cron_expression": "0 2 * * *"
+}
+----
+
+Use `collect_hourly_metrics` for hourly collectors, `collect_daily_metrics` for daily collectors, and `collect_snapshot_metrics` for snapshot collectors. The public collector name is used in analytics URLs; recurring task data uses the internal `collector_type` value shown in the collector mapping above.
+
+Manage customer-created recurring tasks with:
+
+[source,http]
+----
+GET    https://<gateway-hostname>/api/metrics/v1/tasks/
+GET    https://<gateway-hostname>/api/metrics/v1/tasks/<task-id>/
+DELETE https://<gateway-hostname>/api/metrics/v1/tasks/<task-id>/
+----
+
+The list response includes each task's `cron_expression`, function, task data, and status. Deleting a customer-created recurring task removes its recurring template. Built-in system tasks are protected and cannot be removed through the normal delete operation.
 
 == Security model and data exposure
 
@@ -204,6 +309,7 @@ The following sensitive data is *not* exposed through the analytics API:
 * `extra_vars` values
 * Vault-encrypted data
 * User email addresses and personal identifiable information (where applicable)
+* Launcher usernames are not exposed by the analytics API. Data collected before this protection was applied may require separate retention or cleanup handling.
 
 === Shared responsibility model
 
@@ -226,12 +332,21 @@ IMPORTANT: Once analytics data is pulled from the API into your BI tool, securin
 
 == API specification
 
-The provisional OpenAPI specification for the analytics API is available in the metrics-service repository:
+The running metrics-service instance publishes its OpenAPI schema over HTTPS:
 
-* *Source*: link:https://github.com/ansible/metrics-service/pull/430[metrics-service PR #430]
-* *Status*: Provisional pending finalized {ControllerNameStart} API spec (target: October 2026)
+[source,text]
+----
+https://<gateway-hostname>/api/metrics/v1/docs/schema/
+----
 
-Use this specification as the authoritative source for endpoint paths, parameter schemas, and response formats. The specification will be finalized and published to the {ControllerNameStart} API documentation when the October {ControllerNameStart} API spec release is complete.
+Interactive Swagger documentation is available at:
+
+[source,text]
+----
+https://<gateway-hostname>/api/metrics/v1/docs/
+----
+
+Use the deployed schema as the authoritative source for endpoint paths, parameters, response formats, and collector-specific payload fields.
 
 == Deployment coverage
 

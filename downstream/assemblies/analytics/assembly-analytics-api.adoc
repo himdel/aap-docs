@@ -9,10 +9,6 @@ This assembly describes the architecture, configuration, collection behavior, an
 
 include::analytics/con-understand-metrics-service-architecture.adoc[leveloffset=+1]
 
-include::analytics/con-understand-indirect-node-counting-and-collection.adoc[leveloffset=+1]
-
-include::analytics/ref-metrics-service-deployment-requirements.adoc[leveloffset=+1]
-
 include::analytics/con-understand-analytics-api-data-model-and-retention.adoc[leveloffset=+1]
 
 include::analytics/proc-connect-a-bi-tool-to-the-analytics-api.adoc[leveloffset=+1]

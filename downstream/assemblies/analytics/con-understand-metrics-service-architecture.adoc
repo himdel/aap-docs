@@ -61,12 +61,6 @@ Metrics service serves as the unified backend for automation dashboard. Metrics 
 
 Dashboard collection is enabled by default when metrics service is installed. Dashboard collection runs on an hourly schedule.
 
-== Indirect node collection
-
-For indirect-node definitions, controller collection behavior, retention,
-supported collections, and reporting guidance, see Understand indirect node
-counting and collection.
-
 == Architecture components
 
 === Core components
@@ -109,7 +103,7 @@ The following table shows analytics API availability by deployment topology:
 
 To skip metrics service installation in containerized deployments, set `automationmetrics_skip_install=true` in `[all:vars]` and omit the `[automationmetrics]` inventory group.
 
-For full deployment prerequisite details by topology, see xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements].
+For deployment-specific prerequisites, follow the supported deployment documentation for your topology.
 
 == Deployment method comparison
 
@@ -172,7 +166,7 @@ Metrics service supports two collection modes:
 
 === Payload retention
 
-Analytics payload retention is resolved by the scheduled cleanup task from the {ControllerNameStart} `cleanup_jobs` schedule, with a 90-day fallback when {ControllerNameStart} is unreachable or no valid schedule exists. The `analytics_retention_days` task argument can override this for an explicit task run. Data older than the resolved retention period is purged by `cleanup_metrics_data`. For storage guidance, see xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements].
+Analytics payload retention is resolved by the scheduled cleanup task from the {ControllerNameStart} `cleanup_jobs` schedule, with a 90-day fallback when {ControllerNameStart} is unreachable or no valid schedule exists. The `analytics_retention_days` task argument can override this for an explicit task run. Data older than the resolved retention period is purged by `cleanup_metrics_data`. For storage guidance, follow the supported deployment documentation for your topology.
 
 === Cluster identification
 
@@ -180,6 +174,4 @@ Each analytics payload includes a `cluster_id` field that identifies the {Contro
 
 == Related links
 
-* xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements]
 * Install metrics service with containerized installer
-* xref:con-understand-indirect-node-counting-and-collection[Understand indirect node counting and collection]

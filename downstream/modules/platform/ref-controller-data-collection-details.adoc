@@ -26,6 +26,7 @@ The enabled analytics collectors expose the following classes of data from
   * running and pending jobs
 * Job execution details (start time, finish time, launch type, and success)
 * Automation task details (success, host id, playbook/role, task name, and module used)
+* Host automation history, including first and most recent automation timestamps where the collector provides them
 
 For field-level API schemas, use the discovery response, the metrics-service
 API specification, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
@@ -76,8 +77,11 @@ interpret gaps in API data.
 === Data gap semantics
 
 A failed scheduled task can leave a gap in stored collection envelopes. A later
-collection does not implicitly rewrite or deduplicate earlier envelopes; use an
-explicit on-demand window when a targeted retry is needed.
+collection does not rewrite earlier successful envelopes. On-demand requests for
+the same resolved window reuse an existing task, while successful collections are
+still stored as collection envelopes rather than updated in place. Use an explicit
+window when a targeted retry is needed, and track collection IDs or windows in the
+BI system.
 
 === No collection-status or backfill-status endpoint
 

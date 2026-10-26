@@ -17,8 +17,8 @@ You can verify whether {Analytics} data is current by checking the discovery end
 
 Metrics-service API collection is asynchronous. On-demand POST requests return
 `202 Accepted` with a task URL, while scheduled collectors run on hourly,
-daily, or snapshot schedules. Use the stored collection envelope timing rather
-than the upstream {Analytics} shipping interval to verify freshness.
+daily, or snapshot schedules. Use the stored collection envelope timing and
+discovery metadata to verify freshness.
 
 The discovery endpoint reports last_collect for each collector. Each collection record also includes started_at and finished_at. Compare these values with the expected collection window to identify stale data.
 
