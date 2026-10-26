@@ -174,7 +174,7 @@ These defaults apply to the queued API task; they do not backfill the full
 retention period. To request a different window, include explicit `since` and
 `until` values in the POST body.
 
-For collection lag and processing time details, see xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance].
+For collection lag and processing time details, see Understand analytics API architecture and performance.
 
 == Security model and data exposure
 
@@ -252,6 +252,6 @@ For Managed Cloud deployments, contact Red Hat Support to confirm the retention 
 
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
-* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* Understand analytics API architecture and performance
 * xref:proc-controller-configure-analytics[Configure {Analytics}]
 * link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]

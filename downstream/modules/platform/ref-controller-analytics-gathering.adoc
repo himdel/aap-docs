@@ -86,6 +86,6 @@ To verify that your analytics data is current, see xref:proc-verify-analytics-da
 == Related links
 
 * xref:ref-analytics-api-reference[Analytics API reference]
-* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* Understand analytics API architecture and performance
 * xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]

@@ -363,5 +363,5 @@ Running multiple BI refresh jobs concurrently against the same analytics API end
 
 * xref:ref-analytics-api-reference[Analytics API reference]
 * xref:con-analytics-api-bi-integration-patterns[Analytics API BI integration patterns]
-* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* Understand analytics API architecture and performance
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]

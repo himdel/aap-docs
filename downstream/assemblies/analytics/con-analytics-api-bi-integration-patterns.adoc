@@ -341,6 +341,6 @@ event or job records are nested inside each envelope's `payload`.
 * xref:ref-analytics-api-reference[Analytics API reference]
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
-* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* Understand analytics API architecture and performance
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
 * xref:proc-controller-configure-analytics[Configure {Analytics}]

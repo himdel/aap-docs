@@ -409,9 +409,16 @@ def convert(source: Path, repo: Path, config: dict, dry_run: bool) -> int:
     documents = discover_documents(source, config)
     if not documents:
         raise ValueError(f"no Markdown documents found under {source}")
+    available_ids = {document["id"] for document in documents}
+    active_aliases = {
+        label: target
+        for label, target in config["aliases"].items()
+        if target in available_ids
+    }
+    active_config = {**config, "aliases": active_aliases}
     generated: dict[str, str] = {}
     for document in documents:
-        generated[document["target"]] = render_document(document, config)
+        generated[document["target"]] = render_document(document, active_config)
     assembly_target = config["title"]["assembly"]
     generated[assembly_target] = render_api_assembly(documents, config)
     generated[config["title"]["master"]] = render_master(config)
