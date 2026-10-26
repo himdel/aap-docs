@@ -1,0 +1,108 @@
+{
+  "managed_manifest": "tools/md_to_adoc.manifest.json",
+  "title": {
+    "master": "downstream/titles/analytics/master.adoc",
+    "assembly": "downstream/assemblies/analytics/assembly-analytics-api.adoc",
+    "book_title": "Using automation analytics",
+    "abstract": "This guide describes Automation Analytics and the analytics API for Ansible Automation Platform.",
+    "static_includes": [
+      "analytics/assembly-evaluating-automation-return.adoc",
+      "analytics/assembly-automation-savings-planner.adoc",
+      "analytics/assembly-insights-reports.adoc",
+      "analytics/assembly-using-job-explorer.adoc",
+      "analytics/assembly-data-dictionary.adoc"
+    ],
+    "static_includes_before_api": true
+  },
+  "source_order": [
+    "understand-analytics-api-architecture-and-performance",
+    "understand-metrics-service-architecture",
+    "automation-dashboard-deployment-options",
+    "understand-indirect-node-counting-and-collection",
+    "metrics-service-deployment-requirements",
+    "automation-analytics-data-dictionary",
+    "understand-analytics-api-data-model-and-retention",
+    "configure-automation-analytics",
+    "connect-a-bi-tool-to-the-analytics-api",
+    "analytics-api-reference",
+    "analytics-api-bi-integration-patterns",
+    "manage-analytics-and-data-collection-in-ansible-automation-platform",
+    "verify-analytics-data-freshness-using-timestamp-fields",
+    "analytics-api-error-handling-and-resilience",
+    "analytics-gathering",
+    "details-about-data-collected-for-automation-analytics",
+    "metrics-service-configuration-variables",
+    "analytics-api-testathon-quick-reference"
+  ],
+  "source_slug_aliases": {
+    "understand-indirect-nodes": "understand-indirect-node-counting-and-collection"
+  },
+  "rules": {
+    "understand-analytics-api-architecture-and-performance": {"type": "CONCEPT"},
+    "understand-metrics-service-architecture": {"type": "CONCEPT"},
+    "automation-dashboard-deployment-options": {"type": "CONCEPT"},
+    "understand-indirect-node-counting-and-collection": {"type": "CONCEPT"},
+    "metrics-service-deployment-requirements": {"type": "REFERENCE"},
+    "automation-analytics-data-dictionary": {
+      "type": "ASSEMBLY",
+      "target": "downstream/assemblies/analytics/assembly-data-dictionary.adoc",
+      "id": "assembly-using-data-dictionary",
+      "omit_from_api_assembly": true
+    },
+    "understand-analytics-api-data-model-and-retention": {"type": "CONCEPT"},
+    "configure-automation-analytics": {
+      "type": "PROCEDURE",
+      "target": "downstream/modules/platform/proc-controller-configure-analytics.adoc",
+      "id": "proc-controller-configure-analytics"
+    },
+    "connect-a-bi-tool-to-the-analytics-api": {"type": "PROCEDURE"},
+    "analytics-api-reference": {"type": "REFERENCE"},
+    "analytics-api-bi-integration-patterns": {"type": "CONCEPT"},
+    "manage-analytics-and-data-collection-in-ansible-automation-platform": {"type": "PROCEDURE"},
+    "verify-analytics-data-freshness-using-timestamp-fields": {"type": "PROCEDURE"},
+    "analytics-api-error-handling-and-resilience": {"type": "REFERENCE"},
+    "analytics-gathering": {
+      "type": "REFERENCE",
+      "target": "downstream/modules/platform/ref-controller-analytics-gathering.adoc",
+      "id": "ref-controller-analytics-gathering"
+    },
+    "details-about-data-collected-for-automation-analytics": {
+      "type": "REFERENCE",
+      "target": "downstream/modules/platform/ref-controller-data-collection-details.adoc",
+      "id": "ref-controller-data-collection-details"
+    },
+    "metrics-service-configuration-variables": {"type": "REFERENCE"},
+    "analytics-api-testathon-quick-reference": {"type": "REFERENCE"}
+  },
+  "name_replacements": [
+    {"find": "Red Hat Ansible Automation Platform", "replace": "{PlatformName}"},
+    {"find": "Ansible Automation Platform", "replace": "{PlatformNameShort}"},
+    {"find": "Automation controller", "replace": "{ControllerNameStart}"},
+    {"find": "automation controller", "replace": "{ControllerName}"},
+    {"find": "Controller", "replace": "{ControllerNameStart}"},
+    {"find": "Automation Analytics", "replace": "{Analytics}"},
+    {"find": "OpenShift Container Platform", "replace": "{OCPShort}"},
+    {"find": "Red Hat Enterprise Linux", "replace": "{RHEL}"}
+  ],
+  "aliases": {
+    "Understand analytics API architecture and performance": "con-understand-analytics-api-architecture-and-performance",
+    "Understand metrics service architecture": "con-understand-metrics-service-architecture",
+    "Automation dashboard deployment options": "con-automation-dashboard-deployment-options",
+    "Understand indirect node counting and collection": "con-understand-indirect-node-counting-and-collection",
+    "Metrics service deployment requirements": "ref-metrics-service-deployment-requirements",
+    "Automation Analytics Data Dictionary": "assembly-using-data-dictionary",
+    "Understand analytics API data model and retention": "con-understand-analytics-api-data-model-and-retention",
+    "Configure Automation Analytics": "proc-controller-configure-analytics",
+    "Connect a BI tool to the analytics API": "proc-connect-a-bi-tool-to-the-analytics-api",
+    "Analytics API reference": "ref-analytics-api-reference",
+    "Analytics API BI integration patterns": "con-analytics-api-bi-integration-patterns",
+    "Analytics API BI integration patterns and workflows": "con-analytics-api-bi-integration-patterns",
+    "Manage analytics and data collection in Ansible Automation Platform": "proc-manage-analytics-and-data-collection-in-ansible-automation-platform",
+    "Manage analytics and data collection": "proc-manage-analytics-and-data-collection-in-ansible-automation-platform",
+    "Verify analytics data freshness using timestamp fields": "proc-verify-analytics-data-freshness-using-timestamp-fields",
+    "Analytics API error handling and resilience": "ref-analytics-api-error-handling-and-resilience",
+    "Analytics gathering": "ref-controller-analytics-gathering",
+    "Details about data collected for Automation Analytics": "ref-controller-data-collection-details",
+    "Understand analytics API architecture and performance": "con-understand-analytics-api-architecture-and-performance"
+  }
+}
