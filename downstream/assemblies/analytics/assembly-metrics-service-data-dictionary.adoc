@@ -2,7 +2,7 @@
 
 [id="assembly-metrics-service-data-dictionary"]
 
-= Metrics-service Analytics API Data Dictionary
+= {Analytics} Data Dictionary
 
 [role="_abstract"]
 This data dictionary describes the JSON contract exposed by the metrics-service analytics API. It covers discovery metadata, stored collection envelopes, on-demand collection responses, and the raw payload fields for each enabled collector.
@@ -12,23 +12,23 @@ This data dictionary describes the JSON contract exposed by the metrics-service 
 
 The analytics API stores each successful gather as a collection envelope. The envelope identifies the collector, source, {ControllerNameStart} installation, collection window, and gather timing; its `payload` contains the collector-specific JSON output. The OpenAPI schema is the source for the field types and nullability represented in the tables below.
 
-The legacy cloud-oriented dictionary used numbered sections and field-level tables with field name, type, example, and description columns. This draft keeps that field-by-field approach but uses API-contract columns: `Required` distinguishes omission from `Nullable`, and nested paths show where array items and dynamic object values occur. Examples are intentionally omitted when the OpenAPI contract does not define one.
+The original {Analytics} dictionary used numbered sections and field-level tables with field name, type, example, and description columns. This draft keeps that field-by-field approach but uses API-contract columns: `Required` distinguishes omission from `Nullable`, and nested paths show where array items and dynamic object values occur. Examples are intentionally omitted when the OpenAPI contract does not define one.
 
 == API responses covered
 
 [options="header"]
 |===
 |Operation |Status |Data described
-|`GET /api/v1/analytics/` |`200` |Discovery response and enabled collector metadata.
-|`GET /api/v1/analytics/{collector}/` |`200` |Paginated collection envelopes and collector payloads.
-|`POST /api/v1/analytics/{collector}/collect/` |`200` |Existing completed task reused for the requested window.
-|`POST /api/v1/analytics/{collector}/collect/` |`202` |Collection task created, requeued, or still in flight.
-|`POST /api/v1/analytics/{collector}/collect/` |`409` |Different collection window already in flight.
+|`GET /api/metrics/v1/analytics/` |`200` |Discovery response and enabled collector metadata.
+|`GET /api/metrics/v1/analytics/{collector}/` |`200` |Paginated collection envelopes and collector payloads.
+|`POST /api/metrics/v1/analytics/{collector}/collect/` |`200` |Existing completed task reused for the requested window.
+|`POST /api/metrics/v1/analytics/{collector}/collect/` |`202` |Collection task created, requeued, or still in flight.
+|`POST /api/metrics/v1/analytics/{collector}/collect/` |`409` |Different collection window already in flight.
 |===
 
 == Shared discovery response
 
-`GET /api/v1/analytics/` returns a `200` response containing a `collectors` array. The `key_field` value is null for arrays and fixed-key objects; for keyed objects it identifies what the top-level object keys represent.
+`GET /api/metrics/v1/analytics/` returns a `200` response containing a `collectors` array. The `key_field` value is null for arrays and fixed-key objects; for keyed objects it identifies what the top-level object keys represent.
 
 [options="header"]
 |===
@@ -46,7 +46,7 @@ The legacy cloud-oriented dictionary used numbered sections and field-level tabl
 
 == Shared collection response
 
-`GET /api/v1/analytics/{collector}/` returns a `200` paginated response. `count` counts stored collection envelopes, not records inside a payload. Each result has the following shared envelope fields; the collector-specific `payload` fields are documented below.
+`GET /api/metrics/v1/analytics/{collector}/` returns a `200` paginated response. `count` counts stored collection envelopes, not records inside a payload. Each result has the following shared envelope fields; the collector-specific `payload` fields are documented below.
 
 [options="header"]
 |===
@@ -77,7 +77,7 @@ The legacy cloud-oriented dictionary used numbered sections and field-level tabl
 
 == On-demand collection request and responses
 
-`POST /api/v1/analytics/{collector}/collect/` accepts the following optional JSON fields. Omitted bounds use the mode-specific default; snapshot collectors reject bounds.
+`POST /api/metrics/v1/analytics/{collector}/collect/` accepts the following optional JSON fields. Omitted bounds use the mode-specific default; snapshot collectors reject bounds.
 
 [options="header"]
 |===
