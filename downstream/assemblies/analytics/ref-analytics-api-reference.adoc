@@ -94,7 +94,7 @@ POST /api/metrics/v1/analytics/<collector-name>/collect/
 
 The discovery endpoint is the authoritative source for enabled collectors in this deployment. It returns each collector's name, description, data shape, mode, window support, last_collect, and the URLs for reading and triggering collection.
 
-The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. The API registry's `enabled` flag only makes a collector available; it does not enable collection by itself. No collector is collected automatically unless a built-in metrics-service task or another configured task uses it. See link:#scheduling-additional-collectors[Scheduling additional collectors] to configure recurring collection.
+The current AAP 2.7 registry contains 33 enabled collectors: 12 hourly, 18 snapshot, and 3 daily. The API registry's `enabled` flag only makes a collector available; it does not enable collection by itself. No collector is collected automatically unless a built-in metrics-service task or another configured task uses it. See link:#scheduling-additional-collectors[Scheduling additional collectors] to configure recurring collection.
 
 The following collectors are collected automatically by the default metrics-service schedules:
 
@@ -119,18 +119,23 @@ The remaining enabled collectors can be collected on demand or added to a custom
 |===
 |Mode |Public collector |`collector_type`
 |Hourly |`controller.unified_jobs` |`unified_jobs_base`
+|Hourly |`controller.unified_jobs_org` |`unified_jobs_org`
 |Hourly |`controller.job_host_summary` |`job_host_summary`
+|Hourly |`controller.credentials_service_org` |`credentials_service_org`
 |Hourly |`controller.main_jobevent` |`main_jobevent_legacy`
 |Hourly |`controller.events_table` |`events_table`
 |Hourly |`controller.workflow_job_node_table` |`workflow_job_node_table`
 |Hourly |`controller.query_info` |`query_info`
 |Snapshot |`controller.counts` |`counts`
 |Snapshot |`controller.cred_type_counts` |`cred_type_counts`
+|Snapshot |`controller.cred_type_counts_org` |`cred_type_counts_org`
 |Snapshot |`controller.host_metric_summary_monthly_table` |`host_metric_summary_monthly_table`
 |Snapshot |`controller.instance_info` |`instance_info`
 |Snapshot |`controller.inventory_counts` |`inventory_counts`
+|Snapshot |`controller.inventory_counts_org` |`inventory_counts_org`
 |Snapshot |`controller.org_counts` |`org_counts`
 |Snapshot |`controller.projects_by_scm_type` |`projects_by_scm_type`
+|Snapshot |`controller.projects_by_scm_type_org` |`projects_by_scm_type_org`
 |Snapshot |`controller.unified_job_template_table` |`unified_job_template_table`
 |Snapshot |`controller.workflow_job_template_node_table` |`workflow_job_template_node_table`
 |Snapshot |`controller.main_host` |`main_host`
@@ -140,7 +145,7 @@ The remaining enabled collectors can be collected on demand or added to a custom
 
 Some host collectors also depend on database helper functions being available in the metrics-service deployment. The discovery response is authoritative for the collectors available in a particular deployment.
 
-For detailed field schemas, see the deployed OpenAPI schema and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+For detailed field schemas, see xref:assembly-using-data-dictionary[{Analytics} Data Dictionary], the deployed OpenAPI schema, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
 
 === Understanding payload shape metadata
 
@@ -367,4 +372,4 @@ For Managed Cloud deployments, contact Red Hat Support to confirm the retention 
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * Understand analytics API architecture and performance
-* link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]
+* xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]

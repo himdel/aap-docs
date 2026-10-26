@@ -22,24 +22,74 @@ This design keeps API response times fast and predictable by leaving cross-colle
 
 The following collectors expose organization attribution fields that enable BI-side filtering and grouping.
 
-=== Collectors with organization fields
+=== Collectors with direct organization fields
 
 [options="header"]
 |===
 |Collector name |Organization field |Record type
 |`controller.unified_jobs_dashboard` |`organization_id` |Job execution records
+|`controller.unified_jobs` |`organization_id` |Unified job records
+|`controller.job_host_summary_service` |`organization_remote_id` |Per-job host summary records
+|`controller.job_host_summary` |`organization_remote_id` |Per-job host summary records
+|`controller.credentials_service_org` |`organization_id` |Credential types grouped by job organization
+|`controller.cred_type_counts_org` |`organization_id` |Credential counts grouped by organization and type
+|`controller.inventory_counts_org` |`organization_id` |Inventory, host, and source counts grouped by organization
+|`controller.org_counts` |`organization_id` (top-level object key) |Organization user and team counts
+|`controller.projects_by_scm_type_org` |`organization_id` |Project counts grouped by organization and SCM type
+|`controller.main_host` |`organization_remote_id` |Current host records
 |`controller.main_host_daily` |`organization_remote_id` |Daily host activity aggregates
-|`controller.main_hostmetric` |no organization field |Host performance metrics
 |`controller.main_indirectmanagednodeaudit` |`organization_remote_id` |Indirect node audit records
-|`controller.events_table` |collector-specific event/job fields |Job events and task execution
 |===
+
+=== Per-organization aggregate collectors
+
+The following collectors provide organization-level aggregates directly. They
+are separate feeds, not an organization filter on another collector. Each
+returns array records containing `organization_id` and `organization_name`.
+
+[options="header"]
+|===
+|Collector name |Mode |Organization-level data
+|`controller.unified_jobs_org` |Hourly |Job count, failure count, and total and average elapsed time grouped by organization, job type, and status
+|`controller.credentials_service_org` |Hourly |Managed credential types used by jobs, grouped by job organization
+|`controller.cred_type_counts_org` |Snapshot |Credential count grouped by organization and credential type, including managed status
+|`controller.inventory_counts_org` |Snapshot |Inventory, host, and source counts grouped by organization and inventory kind
+|`controller.projects_by_scm_type_org` |Snapshot |Project count grouped by organization and source-control type
+|===
+
+These five organization-aware aggregate collectors are enabled for the
+analytics API but are not part of the default metrics-service recurring
+schedule. Use the discovery response to confirm that a collector is enabled,
+then collect it on demand or create an explicit recurring task.
+
+=== How to collect and use organization aggregates
+
+. Query `GET /api/metrics/v1/analytics/` and select the required collector's
+   `rows_url`. The discovery response identifies its mode and whether it
+   accepts `since` and `until` bounds.
+. For an on-demand collection, POST to the collector's `collect_url`:
+   * Use `collect_hourly_metrics` for `unified_jobs_org` and
+     `credentials_service_org`.
+   * Use `collect_snapshot_metrics` for `cred_type_counts_org`,
+     `inventory_counts_org`, and `projects_by_scm_type_org`.
+. Read the paginated collection envelopes from `rows_url` after the task
+   completes, and flatten each array payload into BI records.
+. Group or filter by `organization_id` in the BI tool. The API does not
+   provide a server-side `?organization_id=` filter, including for these
+   pre-aggregated collectors.
+
+Use the collection envelope's `cluster_id` together with an organization ID
+when combining data from multiple {ControllerNameStart} installations. Organization IDs
+can overlap between installations.
 
 === Collectors without organization fields
 
 The following collectors capture cluster-wide or non-organization-scoped data:
 
 * Use the discovery response to identify available snapshot collectors.
-* `controller.workflow_job_node_table` (workflow nodes, join to jobs for org attribution)
+* `controller.main_hostmetric` (host performance metrics)
+* `controller.main_jobevent_service` and `controller.events_table` (join event job IDs to a job collector for organization attribution)
+* `controller.workflow_job_node_table` (workflow nodes, join to jobs for organization attribution)
 
 == Using data from multiple collectors
 
@@ -154,4 +204,4 @@ For a step-by-step procedure to verify data currency using these fields, see xre
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
 * xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
-* link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]
+* xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]

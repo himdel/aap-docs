@@ -29,7 +29,7 @@ The enabled analytics collectors expose the following classes of data from
 * Host automation history, including first and most recent automation timestamps where the collector provides them
 
 For field-level API schemas, use the discovery response, the metrics-service
-API specification, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+API specification, and xref:assembly-using-data-dictionary[{Analytics} Data Dictionary].
 
 == Collector types and scheduling
 
@@ -102,6 +102,7 @@ API reference and xref:proc-verify-analytics-data-freshness-using-timestamp-fiel
 == Related links
 
 * xref:ref-analytics-api-reference[Analytics API reference]
+* xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
