@@ -2,7 +2,7 @@
 
 [id="assembly-metrics-service-data-dictionary"]
 
-= {Analytics} Data Dictionary
+= Metrics-service Analytics API Data Dictionary
 
 [role="_abstract"]
 This data dictionary describes the JSON contract exposed by the metrics-service analytics API. It covers discovery metadata, stored collection envelopes, on-demand collection responses, and the raw payload fields for each enabled collector.
@@ -12,7 +12,7 @@ This data dictionary describes the JSON contract exposed by the metrics-service 
 
 The analytics API stores each successful gather as a collection envelope. The envelope identifies the collector, source, {ControllerNameStart} installation, collection window, and gather timing; its `payload` contains the collector-specific JSON output. The OpenAPI schema is the source for the field types and nullability represented in the tables below.
 
-The original {Analytics} dictionary used numbered sections and field-level tables with field name, type, example, and description columns. This draft keeps that field-by-field approach but uses API-contract columns: `Required` distinguishes omission from `Nullable`, and nested paths show where array items and dynamic object values occur. Examples are intentionally omitted when the OpenAPI contract does not define one.
+The legacy Automation Analytics dictionary used numbered sections and field-level tables with field name, type, example, and description columns. This draft keeps that field-by-field approach but uses API-contract columns: `Required` distinguishes omission from `Nullable`, and nested paths show where array items and dynamic object values occur. Examples are intentionally omitted when the OpenAPI contract does not define one.
 
 == API responses covered
 
