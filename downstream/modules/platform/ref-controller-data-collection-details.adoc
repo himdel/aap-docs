@@ -5,12 +5,13 @@
 = Details about data collected for {Analytics}
 
 [role="_abstract"]
-{ControllerNameStart} collects configuration, topology, job execution, and task details and sends them to Red Hat when {Analytics} is enabled. This topic describes the collected data classes, collector types, timestamp fields for data-currency verification, and collection failure behavior.
+Metrics service exposes raw automation-controller data through enabled per-collector analytics API endpoints. This topic summarizes the data classes and collector modes; use Analytics API reference and the API data model for the authoritative endpoint and field contracts.
 
 
 == Data collected
 
-{Analytics} collects the following classes of data from {ControllerName}:
+The enabled analytics collectors expose the following classes of data from
+{ControllerName}:
 
 * Basic configuration, such as which features are enabled, and what operating system is being used
 * Topology and status of the {ControllerName} environment and hosts, including capacity and health
@@ -26,98 +27,78 @@
 * Job execution details (start time, finish time, launch type, and success)
 * Automation task details (success, host id, playbook/role, task name, and module used)
 
-You can use `awx-manage gather_analytics` (without `--ship`) to inspect the data that {ControllerName} sends, so that you can satisfy your data collection concerns. This creates a .tar file that contains the analytics data that is sent to Red Hat.
-
-For field-level schema definitions of each file in the tar archive, see the link:https://access.redhat.com/articles/7124201[xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]].
+For field-level API schemas, use the discovery response, the metrics-service
+API specification, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
 
 == Collector types and scheduling
 
-{Analytics} uses three collector classifications. The classification determines how frequently each data type is collected and how it affects data freshness.
+Metrics-service analytics uses three collector modes. The mode determines the
+scheduled cadence and the default window used for on-demand collection.
 
 === Snapshot collectors
 
 Capture point-in-time data representing current state, such as configuration
-and topology. Snapshot collectors run at each collection window trigger. Use
-the discovery `last_collect` and collection-envelope timing fields to verify
-API freshness.
+and topology. Snapshot collectors do not use a time window.
 
 === Daily collectors
 
 Collect metrics that aggregate over a calendar day. Examples include
-`main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. Use
-the collection envelope's `finished_at` to verify API freshness; payload fields
-are collector-specific.
+`main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. An
+on-demand request without explicit bounds uses the previous complete day.
 
-=== Hourly collectors (CSV, high-cost)
+=== Hourly collectors
 
 Collect large tabular data sets including `events_table`,
-`unified_jobs_dashboard`, and `workflow_job_node_table` using the hourly
-collection window. Because of their size, these collectors are the primary
-driver of collection processing time at large event volumes.
+`unified_jobs_dashboard`, and `workflow_job_node_table`. An on-demand request
+without explicit bounds uses the previous complete hour.
 
-For the collection lag formula and how system load affects processing time, see xref:ref-controller-analytics-gathering[Analytics gathering].
+== Collection processing and task timing
 
-== Collection processing time
-
-After an upstream collection window opens, {ControllerName} gathers,
-packages, and ships {Analytics} data. The time required for this
-processing depends on the volume of job events accumulated since the previous
-collection. These processing figures describe the upstream shipping path; use
-the metrics-service collection envelope timing for API freshness.
-
-The following table shows observed processing times by event volume tier. These figures are from internal performance testing and represent observed behavior, not a service level agreement (SLA).
-
-[options="header"]
-|===
-|Approximate event volume |Observed processing time
-|\~1,000 events |\~11 seconds
-|\~10,000 events |11–18 seconds
-|\~100,000 events |\~33 seconds
-|===
-
-For the complete lag formula (collection window wait + processing time), see xref:ref-controller-analytics-gathering[Analytics gathering].
+On-demand collection is asynchronous: the API returns `202 Accepted` with a
+task URL, and the payload becomes available after the task completes. Response
+and task timing depends on the collector, payload size, database, and system
+load; the API does not define a processing-time SLA. See Analytics API
+reference and xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience].
 
 == Freshness reference
 
 For API freshness, use the discovery and collection-envelope timing metadata
 described in xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]. This topic
-focuses on the data collected and the behavior of the upstream shipping path,
-not on repeating the API freshness procedure.
+focuses on the data classes and collection behavior, not on repeating the API
+freshness procedure.
 
 == Collection failure and delay behavior
 
-If an upstream analytics collection cycle fails or is delayed, the data for
-that window is not collected. Understanding these failure semantics helps you
-interpret gaps in {Analytics} data.
+If an analytics collection task fails or is delayed, no successful collection
+envelope is created for that task. Understanding this behavior helps you
+interpret gaps in API data.
 
 === Data gap semantics
 
-A missed collection cycle creates a gap in analytics data for that window's time period. {ControllerNameStart} does not automatically backfill the gap when the next successful collection runs. The next successful collection covers only events that fall within the new collection window.
+A failed scheduled task can leave a gap in stored collection envelopes. A later
+collection does not implicitly rewrite or deduplicate earlier envelopes; use an
+explicit on-demand window when a targeted retry is needed.
 
 === No collection-status or backfill-status endpoint
 
-No public API endpoint exposes collection run status or backfill state. Use
-the discovery and collection-envelope timing metadata (see Verify analytics
-data freshness using timestamp fields) to confirm collection cycle completion.
+No public API endpoint exposes collection run status or backfill state. Use the
+task status and collection-envelope timing metadata (see Verify analytics data
+freshness using timestamp fields) to confirm collection completion.
 
 === Recovery
 
-For recovery actions, including the manual gather command, see Manage
-analytics and data collection in {PlatformNameShort} and Analytics
-gathering. For API freshness verification, see Verify analytics data freshness
-using timestamp fields.
+For API recovery and freshness verification, see xref:ref-analytics-api-reference[Analytics API reference] and
+xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience].
 
 == BI refresh scheduling guidance
 
-For upstream shipping-window refresh guidance, see Manage analytics and data
-collection in {PlatformNameShort}. For metrics-service API refreshes,
-use the collector mode and collection timing metadata described in Analytics
+Use the collector mode and collection timing metadata described in Analytics
 API reference and xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
 
 == Related links
 
 * xref:ref-analytics-api-reference[Analytics API reference]
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
-* xref:proc-controller-configure-analytics[Configure {Analytics}]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
-* xref:ref-controller-analytics-gathering[Analytics gathering]
+* xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience]

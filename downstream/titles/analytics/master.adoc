@@ -22,6 +22,4 @@ include::analytics/assembly-insights-reports.adoc[leveloffset=+1]
 
 include::analytics/assembly-using-job-explorer.adoc[leveloffset=+1]
 
-include::analytics/assembly-data-dictionary.adoc[leveloffset=+1]
-
 include::analytics/assembly-analytics-api.adoc[leveloffset=+1]

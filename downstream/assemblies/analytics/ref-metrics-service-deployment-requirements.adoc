@@ -17,8 +17,8 @@ Review the deployment type and configuration requirements for your topology befo
 |===
 |Topology |Deployment type |Pre-configuration required |Opt-out method |Notes
 |Containerized (on-premise) |Manual |[automationmetrics] inventory group; database credentials in inventory |automationmetrics_skip_install=true in [all:vars] |Requires explicit deployment; administrator provisions both databases. Explicit metrics service deployment is required for analytics API access.
-|Operator on OpenShift (on-premise) |Semi-automatic |Set metrics.disabled: false in AnsibleAutomationPlatform CR |metrics.disabled: true in CR |Databases are automatically provisioned by the operator. Explicit metrics service enablement is required for analytics API access.
-|Managed cloud (Red Hat-hosted) |Pre-installed |None required |metrics.disabled: true in CR |Metrics service is pre-installed; no manual deployment steps required for analytics API access.
+|Operator on OpenShift (on-premise) |Semi-automatic |Follow the supported AAP operator deployment documentation |Not defined in this topic |Databases are automatically provisioned by the operator. Metrics service deployment is required for analytics API access.
+|Managed cloud (Red Hat-hosted) |Pre-installed |None required |Not defined in this topic |Metrics service is pre-installed; no manual deployment steps required for analytics API access.
 |===
 
 == System requirements

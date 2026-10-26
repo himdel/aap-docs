@@ -321,6 +321,18 @@ def discover_documents(source: Path, config: dict) -> list[dict]:
     return documents
 
 
+def active_document_ids(source: Path, documents: list[dict], config: dict) -> set[str]:
+    """Read the review bundle's top-level ToC to decide what the assembly lists."""
+    root_files = sorted((source / "01-anstrat-1587-docs").glob("index.md"))
+    if not root_files:
+        return {document["id"] for document in documents}
+    text = root_files[0].read_text(encoding="utf-8")
+    labels = [unescape_markdown(label).strip() for label in re.findall(r"\[([^]]+)\]\([^)]*\)", text)]
+    aliases = config["aliases"]
+    active = {aliases[label] for label in labels if label in aliases}
+    return active or {document["id"] for document in documents}
+
+
 def render_document(document: dict, config: dict) -> str:
     raw_lines = document["source"].read_text(encoding="utf-8").splitlines()
     _, title_line = find_title(raw_lines)
@@ -348,9 +360,11 @@ def include_path(target: str) -> str:
     raise ValueError(f"cannot create title include for {target}")
 
 
-def render_api_assembly(documents: list[dict], config: dict) -> str:
+def render_api_assembly(documents: list[dict], config: dict, active_ids: set[str]) -> str:
     lines = [":_mod-docs-content-type: ASSEMBLY", "", '[id="assembly-analytics-api"]', "", "= Analytics API", "", '[role="_abstract"]', "This assembly describes the architecture, configuration, collection behavior, and API used to retrieve Automation Analytics data.", ""]
     for document in documents:
+        if document["id"] not in active_ids:
+            continue
         if document["rule"].get("omit_from_api_assembly"):
             continue
         lines.append(f"include::{include_path(document['target'])}[leveloffset=+1]")
@@ -358,11 +372,13 @@ def render_api_assembly(documents: list[dict], config: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_master(config: dict) -> str:
+def render_master(config: dict, active_ids: set[str]) -> str:
     title = config["title"]
     lines = [":_mod-docs-content-type: ASSEMBLY", ":imagesdir: images", ":numbered:", ":toclevels: 1", "", ":experimental:", "", "include::attributes/attributes.adoc[]", "", f"= {title['book_title']}", "", '[role="_abstract"]', title["abstract"], "", "include::{Boilerplate}[]", ""]
     if title.get("static_includes_before_api", True):
         for include in title["static_includes"]:
+            if include == "analytics/assembly-data-dictionary.adoc" and "assembly-using-data-dictionary" not in active_ids:
+                continue
             lines.append(f"include::{include}[leveloffset=+1]")
             lines.append("")
     lines.append(f"include::analytics/{Path(title['assembly']).name}[leveloffset=+1]")
@@ -409,6 +425,7 @@ def convert(source: Path, repo: Path, config: dict, dry_run: bool) -> int:
     documents = discover_documents(source, config)
     if not documents:
         raise ValueError(f"no Markdown documents found under {source}")
+    active_ids = active_document_ids(source, documents, config)
     available_ids = {document["id"] for document in documents}
     active_aliases = {
         label: target
@@ -420,8 +437,8 @@ def convert(source: Path, repo: Path, config: dict, dry_run: bool) -> int:
     for document in documents:
         generated[document["target"]] = render_document(document, active_config)
     assembly_target = config["title"]["assembly"]
-    generated[assembly_target] = render_api_assembly(documents, config)
-    generated[config["title"]["master"]] = render_master(config)
+    generated[assembly_target] = render_api_assembly(documents, config, active_ids)
+    generated[config["title"]["master"]] = render_master(config, active_ids)
     generated[ensure_platform_link(repo, dry_run)] = ""
 
     manifest_path = repo / config["managed_manifest"]

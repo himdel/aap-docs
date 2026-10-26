@@ -10,7 +10,6 @@ Business intelligence (BI) tools can integrate with the {PlatformNameShort} anal
 
 == Prerequisites
 
-* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
 * You have System Administrator or System Auditor role access to {ControllerName}.
 * Your {ControllerName} deployment is running AAP 2.7 or later.
 * You have a BI tool or REST client that supports JSON API data sources.
@@ -59,19 +58,21 @@ IMPORTANT: Wait for collection to complete before querying data. Allow at least 
 the collector and requested bounds are identical. Concurrent requests are not
 deduplicated by the API view.
 
-=== Pattern 2: Scheduled POST via recurring task
+=== Pattern 2: Metrics-service recurring task
 
-Use this pattern when your BI tool cannot trigger external API calls but can query on a schedule.
+Use this pattern when your BI tool cannot trigger external API calls but the
+metrics-service scheduler can own the collection schedule.
 
 *When to use:*
 
 * Your BI tool supports only GET requests (no pre-refresh webhook capability).
 * You want to align collection timing with BI refresh schedules without embedding trigger logic in the BI tool.
-* You prefer server-side collection scheduling managed by {ControllerName}.
+* You prefer server-side collection scheduling managed by metrics service.
 
 *How it works:*
 
-. Create a recurring task in {ControllerName} that POSTs to the collector endpoints on a cron schedule:
+. Create a recurring task in metrics service. For example, an hourly task for
+   the `events_table` collector uses the metrics-service task API:
 
 [source,sh]
 ----
@@ -79,22 +80,21 @@ curl -X POST \
   -H "Authorization: Bearer <your-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Analytics collection for BI tool",
-    "enabled": true,
-    "rrule": "DTSTART;TZID=America/New_York:20261015T040000 RRULE:FREQ=DAILY;INTERVAL=1",
-    "unified_job_template": <template-id>,
-    "extra_data": {
-      "collector": "controller.events_table"
-    }
-  }' \
-  https://<gateway-hostname>/api/v2/schedules/
+      "name": "Analytics collection for BI tool",
+      "function_name": "collect_hourly_metrics",
+      "task_data": {"collector_type": "events_table"},
+      "cron_expression": "0 * * * *"
+    }' \
+  https://<gateway-hostname>/api/metrics/v1/tasks/schedule_recurring/
 ----
 
-. The controller triggers collection on the cron schedule (for example, daily at 4:00 AM).
+. Metrics service creates a child collection task on each cron fire.
 
-. Your BI tool queries the GET endpoint 1–2 minutes after the scheduled collection time to retrieve fresh data.
+. Your BI tool queries the analytics GET endpoint after the task completes to retrieve fresh data.
 
-NOTE: For detailed server-side scheduling configuration, see AAP-90679 (controller-side scheduling option).
+Use `collect_daily_metrics` with a daily collector or `collect_snapshot_metrics`
+with a snapshot collector. See xref:ref-analytics-api-reference[Analytics API reference] for the collector modes
+and default windows.
 
 === Pattern 3: GET-based auto-trigger (POC only, not supported)
 
@@ -104,7 +104,7 @@ Use Pattern 1 (manual POST) or Pattern 2 (scheduled POST) instead.
 
 == Customer-side data preparation
 
-The API returns separate collector feeds rather than pre-joined datasets. Retrieve the feeds you need, inspect the fields returned for each collector, and perform joins or aggregations in your BI tool. Use the discovery response and the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary] to confirm available fields and join keys.
+The API returns separate collector feeds rather than pre-joined datasets. Retrieve the feeds you need, inspect the fields returned for each collector, and perform joins or aggregations in your BI tool. Use the discovery response and the metrics-service API specification to confirm available fields and join keys.
 
 == Real-world workflow scenarios
 
@@ -196,7 +196,7 @@ curl -I -H "Authorization: Bearer <token>" \
 
 * Pull analytics data frequently (daily or every few hours) and store it in your BI tool database.
 * Do not rely on the analytics API for long-term historical storage.
-* Monitor retention period changes via {ControllerName} settings.
+* Monitor the effective retention from the {ControllerNameStart} `cleanup_jobs` schedule.
 
 === Scenario 5: Timezone and DST date handling
 
@@ -343,4 +343,3 @@ event or job records are nested inside each envelope's `payload`.
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * Understand analytics API architecture and performance
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
-* xref:proc-controller-configure-analytics[Configure {Analytics}]

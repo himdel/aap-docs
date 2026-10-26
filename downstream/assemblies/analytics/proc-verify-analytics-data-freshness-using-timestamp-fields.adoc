@@ -10,17 +10,15 @@ You can verify whether {Analytics} data is current by checking the discovery end
 
 .Prerequisites
 
-* {Analytics} is enabled in {ControllerName} settings.
-* You know the time recorded in the `AUTOMATION_ANALYTICS_LAST_GATHER` controller setting, or the scheduled collection window close time. For how to locate this setting and collection window timing, see xref:ref-controller-analytics-gathering[Analytics gathering].
-* You have API access to the {Analytics} endpoint on the Red Hat Hybrid Cloud Console.
+* You have API access to the metrics-service analytics API through the platform gateway.
+* You know the expected schedule for the collector you are querying.
 
 .Context
 
-Upstream {Analytics} shipping introduces a lag between job completion
-and data availability through that shipping path. The lag can include the
-four-hour shipping window and collection processing time. Metrics-service API
-requests use the stored collection envelope timing instead. For background on
-both paths, see xref:ref-controller-analytics-gathering[Analytics gathering].
+Metrics-service API collection is asynchronous. On-demand POST requests return
+`202 Accepted` with a task URL, while scheduled collectors run on hourly,
+daily, or snapshot schedules. Use the stored collection envelope timing rather
+than the upstream {Analytics} shipping interval to verify freshness.
 
 The discovery endpoint reports last_collect for each collector. Each collection record also includes started_at and finished_at. Compare these values with the expected collection window to identify stale data.
 
@@ -90,7 +88,7 @@ curl -H "Authorization: Bearer <your-token>" \
    close time; do not infer freshness from a fixed payload field shared by all
    collectors.
 
-   For processing time estimates by event volume, see xref:ref-controller-analytics-gathering[Analytics gathering].
+    For API response and task behavior, see xref:ref-analytics-api-reference[Analytics API reference].
 
 . Evaluate the collection timing comparison and take the appropriate action.
 
@@ -103,13 +101,8 @@ The collection timing comparison tells you whether the most recent collection cy
 
 .Post-requisites
 
-If data appears stale after the collection window has closed, the collection cycle may have failed or been delayed. To trigger an immediate collection, run the following command:
-
-[source,sh]
-----
-$ awx-manage gather_analytics --ship
-----
-
-For full recovery procedures including connectivity checks, see xref:proc-manage-analytics-and-data-collection-in-ansible-automation-platform[xref:proc-manage-analytics-and-data-collection-in-ansible-automation-platform[Manage analytics and data collection] in {PlatformNameShort}].
-
-For collection failure behavior and data gap semantics, see xref:ref-controller-data-collection-details[Details about data collected for {Analytics}].
+If data appears stale after the expected collection time, inspect the task
+status for an on-demand request or wait for the scheduled task to complete.
+System Administrators can retry collection with the collector's `/collect/`
+endpoint. There is no API backfill-status endpoint; see xref:ref-analytics-api-reference[Analytics API reference]
+and xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience] for recovery guidance.

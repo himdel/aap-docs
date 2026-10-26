@@ -43,7 +43,7 @@ The following collectors capture cluster-wide or non-organization-scoped data:
 
 == Using data from multiple collectors
 
-The API does not join data from different collectors. Retrieve each collector's data, inspect the fields returned for that collector, and perform any joins or aggregations in your BI tool. Use the discovery response and the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary] to confirm available fields and join keys.
+The API does not join data from different collectors. Retrieve each collector's data, inspect the fields returned for that collector, and perform any joins or aggregations in your BI tool. Use the discovery response and the metrics-service API specification to confirm available fields and join keys.
 
 == Events to collection metadata (derive collection name and version)
 

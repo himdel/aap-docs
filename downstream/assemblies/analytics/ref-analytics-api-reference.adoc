@@ -10,7 +10,6 @@ The analytics API provides programmatic access to {ControllerName} analytics dat
 
 == Prerequisites
 
-* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
 * You have System Administrator or System Auditor role access to {ControllerName}.
 * Your {ControllerName} deployment is running AAP 2.7 or later.
 
@@ -95,7 +94,7 @@ POST /api/metrics/v1/analytics/<collector-name>/collect/
 
 The discovery endpoint is the authoritative source for enabled collectors in this deployment. It returns each collector's name, description, data shape, mode, window support, last_collect, and the URLs for reading and triggering collection.
 
-The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. For detailed field schemas, see the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary].
+The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. For detailed field schemas, see the metrics-service API specification and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
 
 == Query parameters
 
@@ -253,5 +252,4 @@ For Managed Cloud deployments, contact Red Hat Support to confirm the retention 
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * Understand analytics API architecture and performance
-* xref:proc-controller-configure-analytics[Configure {Analytics}]
 * link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]

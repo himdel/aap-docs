@@ -10,7 +10,6 @@ You can connect a business intelligence (BI) tool or REST client to the {Platfor
 
 .Prerequisites
 
-* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
 * You have System Administrator or System Auditor role access to {ControllerName}.
 * Your {ControllerName} deployment is running AAP 2.7 or later.
 * You have installed and configured a BI tool or REST client that supports JSON API data sources.
@@ -18,9 +17,8 @@ You can connect a business intelligence (BI) tool or REST client to the {Platfor
 .Context
 
 The analytics API provides programmatic access to {ControllerName} data
-through HTTP endpoints. Unlike the Red Hat Hybrid Cloud Console Automation
-Analytics interface, the analytics API lets you pull raw data into your own BI
-tool for custom dashboards, reports, and analysis.
+through HTTP endpoints. It lets you pull raw data into your own BI tool for
+custom dashboards, reports, and analysis.
 
 This procedure demonstrates the generic workflow from token creation through a
 first API call. Use the API contract, data model, BI integration patterns,

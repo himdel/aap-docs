@@ -26,7 +26,7 @@ Metrics service is a Django-based application component of {PlatformNameShort} 2
 Metrics service is available in {PlatformNameShort} 2.7 for both operator-based (OpenShift) and containerized installations that include {ControllerName}. The steps required to enable it depend on your deployment type.
 
 * *Containerized installations:* Metrics service requires explicit deployment. Add the `[automationmetrics]` inventory group when installing {PlatformNameShort} if `automationcontroller` is present in the inventory file. To skip metrics service installation, set `automationmetrics_skip_install=true` in `[all:vars]`.
-* *Operator installations (on-premise):* Metrics service requires explicit enablement. Set `metrics.disabled: false` in the AnsibleAutomationPlatform custom resource. To disable metrics service after installation, set `metrics.disabled: true` in the CR.
+* *Operator installations (on-premise):* Metrics service deployment and enablement are operator-managed. Follow the supported AAP deployment documentation; this topic does not define an operator enablement or opt-out setting.
 * *Managed cloud (Red Hat-hosted):* Metrics service is pre-installed. No additional configuration is required to enable analytics API access.
 
 == Key characteristics
@@ -119,10 +119,10 @@ Metrics service supports two deployment methods with different configuration com
 |===
 |Aspect |Containerized Installer |Operator (OpenShift)
 |*Deployment method* |Ansible role (`automationmetrics`) in containerized installation program |Kubernetes operator (`automation-metrics-operator`) managed by AAP gateway operator
-|*Configuration complexity* |Manual: requires inventory file edits, database passwords, network variables |Automatic: single CR field (`metrics.disabled: false`)
+|*Configuration complexity* |Manual: requires inventory file edits, database passwords, network variables |Operator-managed; follow the supported AAP deployment documentation
 |*Database provisioning* |Administrator provisions databases and configures credentials in inventory |Operator automatically provisions databases and manages credentials via Kubernetes secrets
-|*Enablement* |Explicit: `[automationmetrics]` inventory group required in inventory file |Explicit enablement required for on-premise: set `metrics.disabled: false` in AnsibleAutomationPlatform CR. Pre-installed in managed cloud (Red Hat-hosted) deployments.
-|*Opt-out mechanism* |`automationmetrics_skip_install=true` in `[all:vars]` |`metrics.disabled: true` in AnsibleAutomationPlatform CR
+|*Enablement* |Explicit: `[automationmetrics]` inventory group required in inventory file |Operator-managed on-premise; follow the supported AAP deployment documentation. Pre-installed in managed cloud (Red Hat-hosted) deployments.
+|*Opt-out mechanism* |`automationmetrics_skip_install=true` in `[all:vars]` |Follow the supported AAP deployment documentation; no operator opt-out setting is defined here
 |===
 
 == Containerized installer deployment details

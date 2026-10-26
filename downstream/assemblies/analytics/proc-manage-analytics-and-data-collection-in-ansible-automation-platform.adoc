@@ -41,4 +41,3 @@ For configuration instructions and the BI refresh offset formula, see the relate
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
-* xref:proc-controller-configure-analytics[Configure {Analytics}]

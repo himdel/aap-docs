@@ -1,7 +1,9 @@
 # Markdown to AsciiDoc migration
 
 `md_to_adoc.py` converts an exported ANSTRAT Markdown state into the existing
-`analytics` title. It applies the repository's modular document headers,
+`analytics` title. It uses the bundle's top-level ToC to decide which topics
+belong in the generated API assembly, while retaining unlisted source topics
+as reusable generated files. It applies the repository's modular document headers,
 AsciiDoc attributes, IDs, cross-references, and title/assembly includes. The
 four Markdown topics that already have AAP counterparts are updated in place:
 
