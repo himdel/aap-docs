@@ -13,7 +13,7 @@ Business intelligence (BI) tools can integrate with the {PlatformNameShort} anal
 * {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
 * You have System Administrator or System Auditor role access to {ControllerName}.
 * Your {ControllerName} deployment is running AAP 2.7 or later.
-* You have a BI tool that supports JSON REST API data sources (for example, Grafana, Power BI, Tableau, or Looker).
+* You have a BI tool or REST client that supports JSON API data sources.
 
 == Recommended trigger patterns for BI connectors
 
@@ -267,9 +267,8 @@ IMPORTANT: If a System Auditor user or BI service account attempts to POST to a 
 
 === Organization-scoped roles
 
-*Status:* PENDING RBAC CLARIFICATION (Oct 14, 2026). Confirm whether organization-scoped users (Organization Admin, Organization Auditor) have analytics API access or if Admin/Auditor-only restriction applies.
-
-*Current assumption:* Only System Administrator and System Auditor roles have analytics API access. Organization-scoped roles do not have access.
+Organization-scoped roles do not have analytics API access. See Analytics API
+reference for the authoritative RBAC matrix.
 
 == Troubleshooting common integration errors
 
@@ -300,8 +299,10 @@ IMPORTANT: If a System Auditor user or BI service account attempts to POST to a 
 *Solution:*
 
 . Wait 1–2 minutes after POSTing to `/collect/` before querying data.
-. Verify collection completed by querying the partition timestamp field. For instructions, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
-. If timestamp is stale, manually trigger collection with POST to `/collect/`.
+. Verify collection completed using the collection timing metadata. For
+   instructions, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+. If the collection timing is stale, manually trigger collection with POST
+   to `/collect/`.
 
 === Error: Data older than expected is missing
 
@@ -309,7 +310,8 @@ IMPORTANT: If a System Auditor user or BI service account attempts to POST to a 
 
 *Solution:*
 
-. Verify the retention period in {ControllerName} settings.
+. Verify the effective retention period from the {ControllerNameStart} `cleanup_jobs`
+   schedule, as described in xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
 . Pull data more frequently (daily or every few hours) to avoid losing historical data.
 . Store long-term historical data in your BI tool database, not the analytics API.
 

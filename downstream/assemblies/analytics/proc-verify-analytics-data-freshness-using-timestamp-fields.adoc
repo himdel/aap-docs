@@ -16,7 +16,11 @@ You can verify whether {Analytics} data is current by checking the discovery end
 
 .Context
 
-{Analytics} collection introduces a lag between job completion and data availability. This lag is the sum of the collection window wait (up to 4 hours by default) and collection processing time (typically 11–33 seconds depending on event volume). For background on collection timing, see xref:ref-controller-analytics-gathering[Analytics gathering].
+Upstream {Analytics} shipping introduces a lag between job completion
+and data availability through that shipping path. The lag can include the
+four-hour shipping window and collection processing time. Metrics-service API
+requests use the stored collection envelope timing instead. For background on
+both paths, see xref:ref-controller-analytics-gathering[Analytics gathering].
 
 The discovery endpoint reports last_collect for each collector. Each collection record also includes started_at and finished_at. Compare these values with the expected collection window to identify stale data.
 

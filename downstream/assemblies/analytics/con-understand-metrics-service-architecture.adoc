@@ -63,9 +63,9 @@ Dashboard collection is enabled by default when metrics service is installed. Da
 
 == Indirect node collection
 
-In addition to direct {ControllerName} usage data, metrics service collects indirect node audit data. Indirect node audit data is a daily, anonymized count of the devices that your automation acts on but that are not members of an {ControllerName} inventory (for example, network switches, routers, and cloud resources configured through a vendor API). Indirect node collection is enabled by default in {PlatformNameShort} 2.7.
-
-The `controller.main_indirectmanagednodeaudit` collector is enabled unconditionally and exposes indirect node audit data through the analytics API at `/api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/`. Data collected by this collector is available directly to authorized external tools, without anonymization, through the analytics API.
+For indirect-node definitions, controller collection behavior, retention,
+supported collections, and reporting guidance, see Understand indirect node
+counting and collection.
 
 == Architecture components
 
@@ -132,8 +132,6 @@ Metrics service is deployed through the `automationmetrics` Ansible role. Hosts 
 == Operator-based deployment details
 
 Metrics service is deployed through the `automation-metrics-operator` running on OpenShift. The AAP gateway operator manages the metrics operator lifecycle.
-
-If the controller database becomes temporarily unavailable, collection tasks defer and resume automatically when connectivity is restored. See the database unreachability note in the Architecture components section for behavior that applies across all deployment topologies.
 
 == Analytics API
 

@@ -150,8 +150,6 @@ For a step-by-step procedure to verify data currency using these fields, see xre
 
 == Related links
 
-== Related links
-
 * xref:ref-analytics-api-reference[Analytics API reference]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]

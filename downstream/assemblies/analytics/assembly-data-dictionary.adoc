@@ -14,7 +14,10 @@ The data dictionary outlines the information collected by {Analytics} from the {
 
 == Data currency verification
 
-No collection-status or backfill-status endpoint exists in the public {Analytics} API. To confirm that a collection cycle has completed and that data is current, query the partition timestamp fields documented in the related links at the end of this topic. For a step-by-step verification procedure, see the related links at the end of this topic.
+No collection-status or backfill-status endpoint exists in the public
+{Analytics} API. For the supported freshness check, use the
+collection timing metadata and procedure in Verify analytics data freshness
+using timestamp fields.
 
 == Related links
 
