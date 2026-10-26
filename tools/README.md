@@ -15,6 +15,14 @@ four Markdown topics that already have AAP counterparts are updated in place:
 Review-only `SME Queries` sections are intentionally omitted from generated
 customer content. The source Markdown remains the review record.
 
+## Review-only tooling
+
+This converter, its configuration, and its managed manifest are review-bundle
+tooling for the ANSTRAT-1587 feature branch. They are not product
+documentation and should not be merged into the canonical `ansible/aap-docs`
+tree. Use them from this review checkout to regenerate the managed AsciiDoc
+files from the sibling Markdown source.
+
 ## Convert a state
 
 From the repository root:
