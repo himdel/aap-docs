@@ -1,0 +1,111 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-understand-indirect-node-counting-and-collection"]
+
+= Understand indirect node counting and collection
+
+[role="_abstract"]
+Learn how {PlatformNameShort} counts indirect nodes: what the anonymized telemetry data represents, where to access raw collector output through the analytics API, and what determines whether a device is counted.
+
+
+== What indirect nodes are
+
+An _indirect node_ is a device that your automation acts on but that is not a member of an {ControllerName} inventory. The platform does not know the node in the normal way: it is created and accessed outside your Ansible infrastructure, and the platform can only observe it from job events as automation runs. Network and cloud platforms are the most common example: when a playbook configures a switch, router, firewall, or cloud resource through a vendor API, that resource is an indirect node.
+
+Directly managed nodes are members of an {ControllerName} inventory, so the platform already knows they exist and counts them through normal inventory reporting. Indirect nodes are in no inventory, so {PlatformNameShort} counts them separately, using audit records that the {ControllerName} generates as jobs run. Because this is observation rather than direct management, indirect node counts are a best-effort measure and are not guaranteed to be exhaustive.
+
+All of these devices are managed nodes. In {PlatformNameShort}, a managed node is any host that your automation acts on, whether the platform manages it directly through an inventory or only observes it as automation runs (for example through an API). The terms directly managed and indirectly managed describe whether the node is known to the platform through an inventory, not different kinds of node. For the platform definition of a managed node, see your Red Hat subscription and node-counting policy documentation.
+
+== How indirect node counting works
+
+Indirect node counting is an end-to-end pipeline: {ControllerName} records the audit data, and metrics service collects it. In {PlatformNameShort} 2.7, {ControllerName} indirect node counting is enabled by default; in {PlatformNameShort} 2.6, this setting remains feature-gated and off by default. Metrics service collection is enabled by default in {PlatformNameShort} 2.6 and 2.7 and will collect indirect node data whenever the controller has recorded any.
+
+Enabled by default is not the same as deployed by default: in {PlatformNameShort} 2.7 the operator deploys metrics service unless you opt out, while in {PlatformNameShort} 2.6 it is deployed only on request. Metrics service is also a Technology Preview feature in {PlatformNameShort} 2.6, and the stable-2.6 operator pins it from the Technology Preview registry path. In {PlatformNameShort} 2.7, no action is required to begin counting on the controller or metrics service side. To turn controller counting off, run the following command on your {ControllerName} host (2.7 only):
+
+[source,sh]
+----
+$ awx-manage set_indirect_node_counting --disable
+----
+
+=== Indirect node counting pipeline
+
+[options="header"]
+|===
+|Stage |Component |Control |What happens
+|1. Counting |{ControllerNameStart} |Enabled by default in 2.7. To disable, run `awx-manage set_indirect_node_counting --disable` on the {ControllerName} host (2.7 only). |As jobs run, the controller records indirect node audit data in the `main_indirectmanagednodeaudit` table, using either a query file embedded in the collection or a supported external query file.
+|2. Collection |Metrics service |Enabled by default in {PlatformNameShort} 2.6 and 2.7 (`controller.main_indirectmanagednodeaudit` collector status: ENABLED). Controlled by the `METRICS_SERVICE_FEATURE__INDIRECT_NODE_COLLECTION` setting. To disable indirect node collection, set `METRICS_SERVICE_FEATURE__INDIRECT_NODE_COLLECTION=false` in the metrics service settings file or as an environment variable. |Once per day, metrics service reads the audit records using the `controller.main_indirectmanagednodeaudit` collector. Collected data is persisted to the `AnalyticsPayload` table and is also included in the anonymized payload sent to Red Hat.
+|3. API access |Metrics service analytics API |Available to authorized users with System Administrator or Platform Auditor role. |Indirect node audit data is accessible via the analytics API at `/api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/`. This endpoint returns raw, non-anonymized collector output for use in external BI and reporting tools.
+|===
+
+The query file is the key dependency. It maps a collection's modules to the facts that identify an indirect node. Coverage can come either from a query file embedded in the collection at `extensions/audit/event_query.yml`, or from a supported external query file, `redhat.indirect_accounting`, which is the only external query source the controller currently checks. External query files are matched per collection version. If a collection is covered by neither, its indirect nodes are not counted, no matter how much automation you run against them.
+
+=== Timing
+
+* *Counting (controller):* The controller records indirect node audit data shortly after the corresponding job events are processed, normally within minutes of a job completing. An hourly fallback job is a safety net that picks up any jobs missed by the immediate path; it is not the normal processing path.
+* *Collection (metrics service):* Metrics service collects indirect node audit data once per day, at 1:55 AM UTC. Counts in the analytics API payload and in the anonymized transmission therefore update on the daily cycle, not immediately after each job.
+
+=== Retention
+
+Two separate retention periods apply, and they serve different purposes. {ControllerNameStart} retains the raw indirect node audit records for 7 days by default, controlled by the `INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` setting. This is an {ControllerName} setting, not a metrics service variable. The raw table holds a record for every indirect host seen in every job, so it grows quickly, which is why the default window is short.
+
+Metrics service retains analytics payloads (including indirect node audit payloads) for 90 days by default, configurable via `analytics_retention_days` (maximum 3,650 days). Because that data is far smaller than the raw controller audit table, it can be kept for considerably longer than the controller retention window. If audit records are purged from the controller before they are collected, that data is lost. This matters most when the customer-facing gather runs less often than the controller retention window.
+
+`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` is not a registered setting, so you can only change it in the settings file or through an environment variable, not through the API or UI.
+
+== What data is captured
+
+Metrics service transmits only aggregated, anonymized counts:
+
+* Indirect node counts (`host_count`) grouped by Ansible collection and module.
+* Host names and organization names are stripped entirely before transmission. No inventory data, device names, or organization names leave your environment.
+
+IMPORTANT: Metrics service does not collect full host inventory data for indirect nodes. Only aggregate counts grouped by collection and module are sent in the anonymized telemetry payload. The analytics API endpoint for `controller.main_indirectmanagednodeaudit` provides the raw, pre-anonymization collector output for authorized external tools. Full host inventory collection for CCSP reporting is handled separately by the metrics utility.
+
+== Where the counts appear
+
+Indirect node audit data is accessible through two channels:
+
+* *Analytics API:* The `controller.main_indirectmanagednodeaudit` collector is enabled and exposes indirect node audit data at `/api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/`. This endpoint provides raw, non-anonymized data for external BI and reporting tools. Authentication requires the System Administrator or Platform Auditor role.
+* *Metrics utility reports:* The `indirectly_managed_nodes` report sheet is available in both the CCSP and CCSPv2 report formats. To include indirect node data in your CCSP reports, you must enable the metrics utility and explicitly configure the `main_indirectmanagednodeaudit` collector and the report sheets. Use the metrics utility to generate the report and confirm your indirect node counts.
+
+NOTE: Because the metrics utility applies deduplication logic and produces the infrastructure summary that the metrics service pipeline does not, the metrics utility report, not the metrics service payload, is the authoritative customer-facing source for indirect node counts used in subscription compliance reporting.
+
+For full analytics API collector registry context, including data flow architecture and the distinction between the raw analytics path and the anonymized telemetry path, see xref:con-understand-metrics-service-architecture[Understand metrics service architecture].
+
+== Supported collections
+
+Indirect node counting works only for Ansible collections covered by a query file, either embedded in the collection as `event_query.yml` or supplied by a supported external query file. Support varies by collection, and the set changes over time as collections add or update query files.
+
+IMPORTANT: Collection support is tracked by the collection's own release, not by your {PlatformNameShort} version. Check Automation Hub for current status. The following table is a point-in-time snapshot, current as of October 2026. Listing a collection here confirms only that it ships a query file; it is not a guarantee of complete or duplicate-free counts. Known issues that cause indirect node records to be dropped or duplicated exist across multiple collections and are under active investigation. Verify current status with your Red Hat contact before relying on it.
+
+=== Collections with query file support (October 2026 snapshot)
+
+[options="header"]
+|===
+|Collection |Ships a query file |Notes
+|cisco.intersight |Yes |—
+|amazon.aws |Yes |—
+|azure.azcollection |Yes |—
+|vmware.vmware |Yes |—
+|microsoft.ad |Yes |—
+|ansible.mcp |Yes |—
+|cisco.meraki |Yes |Query file covers switches primarily.
+|===
+
+Collections that do not currently ship a query file, and therefore produce no indirect node counts, include cisco.ios (the highest-usage network collection), cisco.nxos, ansible.windows, f5networks.f5_modules, and paloaltonetworks.panos.
+
+=== Collections with a query file but not available on Automation Hub
+
+The following collections ship a query file but are not currently available on Automation Hub. You cannot install them through the standard distribution channel. Do not rely on these collections for indirect node counting until they become available on Automation Hub.
+
+[options="header"]
+|===
+|Collection |Status
+|cisco.catalystcenter |Ships a query file; not currently available on Automation Hub.
+|===
+
+== Related links
+
+* *Related tasks:* Verify indirect node collection, Troubleshoot metrics service
+* *Related reference:* xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements]
+* *Related concepts:* xref:con-understand-metrics-service-architecture[Understand metrics service architecture]

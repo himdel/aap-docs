@@ -2,47 +2,125 @@
 
 [id="ref-controller-data-collection-details"]
 
-= Details of data collection
+= Details about data collected for {Analytics}
 
 [role="_abstract"]
-Learn about the specific data that {ControllerName} collects and sends to Red Hat when you enable {Analytics}.
+{ControllerNameStart} collects configuration, topology, job execution, and task details and sends them to Red Hat when {Analytics} is enabled. This topic describes the collected data classes, collector types, timestamp fields for data-currency verification, and collection failure behavior.
+
+
+== Data collected
 
 {Analytics} collects the following classes of data from {ControllerName}:
 
 * Basic configuration, such as which features are enabled, and what operating system is being used
 * Topology and status of the {ControllerName} environment and hosts, including capacity and health
 * Counts of automation resources:
-
-** organizations, teams, and users
-** inventories and hosts
-** credentials (indexed by type)
-** projects (indexed by type)
-** templates
-** schedules
-** active sessions
-** running and pending jobs
+  * organizations, teams, and users
+  * inventories and hosts
+  * credentials (indexed by type)
+  * projects (indexed by type)
+  * templates
+  * schedules
+  * active sessions
+  * running and pending jobs
 * Job execution details (start time, finish time, launch type, and success)
 * Automation task details (success, host id, playbook/role, task name, and module used)
 
-You can use `awx-manage gather_analytics` (without `--ship`) to inspect the data that {ControllerName} sends, so that you can satisfy your data collection concerns. 
-This creates a .tar file that contains the analytics data that is sent to Red Hat.
+You can use `awx-manage gather_analytics` (without `--ship`) to inspect the data that {ControllerName} sends, so that you can satisfy your data collection concerns. This creates a .tar file that contains the analytics data that is sent to Red Hat.
 
-This file contains several JSON and CSV files. 
-Each file contains a different set of analytics data.
+For field-level schema definitions of each file in the tar archive, see the link:https://access.redhat.com/articles/7124201[xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]].
 
-* xref:ref-controller-manifest-json[manifest.json]
-* xref:ref-controller-config-json[config.json]
-* xref:ref-controller-instance-info-json[instance_info.json]
-* xref:ref-controller-counts-json[counts.json]
-* xref:ref-controller-org-counts-json[org_counts.json]
-* xref:ref-controller-cred-type-counts-json[cred_type_counts.json]
-* xref:ref-controller-inventory-counts-json[inventory_counts.json]
-* xref:ref-controller-projects-scm-type-json[projects_by_scm_type.json]
-* xref:ref-controller-query-info-json[query_info.json]
-* xref:ref-controller-job-counts-json[job_counts.json]
-* xref:ref-controller-job-instance-counts-json[job_instance_counts.json]
-* xref:ref-controller-unified-job-template-table-csv[unified_job_template_table.csv]
-* xref:ref-controller-unified-jobs-table-csv[unified_jobs_table.csv]
-* xref:ref-controller-workflow-job-template-node-table-csv[workflow_job_template_node_table.csv]
-* xref:ref-controller-workflow-job-node-table-csv[workflow_job_node_table.csv]
-* xref:ref-controller-events-table-csv[events_table.csv]
+== Collector types and scheduling
+
+{Analytics} uses three collector classifications. The classification determines how frequently each data type is collected and how it affects data freshness.
+
+=== Snapshot collectors
+
+Capture point-in-time data representing current state, such as cluster configuration and topology. Snapshot collectors run at each collection window trigger. The partition key for snapshot data is `Cluster Data.timestamp`.
+
+=== Daily collectors
+
+Collect metrics that aggregate over a calendar day. Examples include `main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. The partition key for daily collector data is `System Data.timestamp`.
+
+=== Hourly collectors (CSV, high-cost)
+
+Collect large tabular data sets including `events_table`, `unified_jobs_table`, and `workflow_job_node_table`. Despite the "hourly" classification name, these collectors use 4-hour time slicing (`four_hour_slicing`) to bound the volume of data processed in any single collection window. The "hourly" label refers to the collector run frequency; data slicing uses a 4-hour window, so the effective data refresh interval matches the collection window, not one hour. Because of their size, high-cost CSV collectors are the primary driver of collection processing time at large event volumes.
+
+For the collection lag formula and how system load affects processing time, see xref:ref-controller-analytics-gathering[Analytics gathering].
+
+== Collection processing time
+
+After a collection window opens, {ControllerName} gathers, packages, and ships analytics data. The time required for this processing depends on the volume of job events accumulated since the previous collection. Processing time is additive to the collection window wait and determines when data becomes queryable in the analytics API.
+
+The following table shows observed processing times by event volume tier. These figures are from internal performance testing and represent observed behavior, not a service level agreement (SLA).
+
+[options="header"]
+|===
+|Approximate event volume |Observed processing time
+|\~1,000 events |\~11 seconds
+|\~10,000 events |11–18 seconds
+|\~100,000 events |\~33 seconds
+|===
+
+For the complete lag formula (collection window wait + processing time), see xref:ref-controller-analytics-gathering[Analytics gathering].
+
+== Timestamp fields for data currency verification
+
+Each collector type exposes a partition timestamp field in the analytics API. You can query these fields to determine whether data for a given collection window is available. No dedicated collection metadata field (such as `last_collected_at`) exists in the public analytics API.
+
+[options="header"]
+|===
+|Data table |Timestamp field |Collector type
+|Cluster Data |`timestamp` |Snapshot
+|System Data |`timestamp` |Daily
+|Job Events |`job_created`, `job_modified` |Hourly (CSV)
+|===
+
+For a step-by-step procedure to verify data currency using these fields, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+== Collection failure and delay behavior
+
+If an analytics collection cycle fails or is delayed, the data for that window is not collected. Understanding how {ControllerName} handles these failures helps you interpret gaps in your analytics data and take corrective action.
+
+=== Data gap semantics
+
+A missed collection cycle creates a gap in analytics data for that window's time period. {ControllerNameStart} does not automatically backfill the gap when the next successful collection runs. The next successful collection covers only events that fall within the new collection window.
+
+=== No collection-status or backfill-status endpoint
+
+No public API endpoint exposes collection run status or backfill state. Timestamp-based verification (see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]) is the only supported method to confirm collection cycle completion.
+
+=== Recovery
+
+If you detect a gap, trigger a manual collection immediately using the following command:
+
+[source,sh]
+----
+$ awx-manage gather_analytics --ship
+----
+
+This ships data collected since the last successful gather. For the full recovery procedure, see xref:proc-manage-analytics-and-data-collection-in-ansible-automation-platform[xref:proc-manage-analytics-and-data-collection-in-ansible-automation-platform[Manage analytics and data collection] in {PlatformNameShort}].
+
+== BI refresh scheduling guidance
+
+When configuring a BI tool to query {Analytics} data, align the tool's refresh schedule with the analytics collection window to avoid querying incomplete data.
+
+[options="header"]
+|===
+|Scheduling factor |Default value |Impact on BI refresh timing
+|Collection window interval |4 hours |New data is available at most every 4 hours; align refresh to a multiple of the window interval
+|Collection processing time |11–33 seconds (by event volume) |Data is not instantly available at window close; add a buffer of at least 1–2 minutes
+|Recommended BI refresh offset |Window close time + 1–2 minutes |Refreshing immediately at window close risks querying incomplete data
+|===
+
+NOTE: {Analytics} collection is batch-only. Real-time streaming is not supported. Do not schedule BI refresh intervals shorter than the collection window interval.
+
+For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-controller-configure-analytics[Configure {Analytics}]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-controller-analytics-gathering[Analytics gathering]

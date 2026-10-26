@@ -1,0 +1,372 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-analytics-api-error-handling-and-resilience"]
+
+= Analytics API error handling and resilience
+
+[role="_abstract"]
+The analytics API returns standard HTTP error codes when requests fail. Understanding error responses, retry strategies, and graceful degradation behavior helps you build resilient BI integrations that handle failures without breaking scheduled refreshes.
+
+
+== Prerequisites
+
+* You are integrating a BI tool with the analytics API. For integration patterns, see xref:con-analytics-api-bi-integration-patterns[Analytics API BI integration patterns].
+* You have System Administrator or System Auditor role access to {ControllerName}.
+
+== HTTP error codes
+
+The analytics API returns standard HTTP status codes to indicate success or failure. Your BI tool should check the status code before processing the response body.
+
+=== Success codes
+
+[options="header"]
+|===
+|Status code |Meaning |Response body
+|200 OK |Request succeeded |JSON object with results array and pagination metadata
+|201 Created |Collection triggered successfully (POST to /collect) |JSON object with collection job details
+|===
+
+=== Client error codes (4xx)
+
+[options="header"]
+|===
+|Status code |Meaning |Common causes |Resolution
+|400 Bad Request |Malformed request syntax |Invalid query parameter format, malformed JSON in POST body |Validate query parameters and JSON syntax before sending
+|401 Unauthorized |Authentication failed |Missing or invalid token, expired token, deleted token |Verify token exists in {ControllerName} and regenerate if necessary
+|403 Forbidden |Insufficient permissions |System Auditor attempting POST to /collect, organization-scoped user accessing analytics API |Use System Administrator token for POST operations, verify role permissions
+|404 Not Found |Endpoint does not exist |Incorrect collector name, typo in URL path |Verify collector name against available collectors list
+|429 Too Many Requests |Rate limit exceeded (if implemented) |Excessive requests in short time window |Implement exponential backoff and retry with Retry-After header value
+|===
+
+=== Server error codes (5xx)
+
+[options="header"]
+|===
+|Status code |Meaning |Common causes |Resolution
+|500 Internal Server Error |Unexpected server-side failure |Database connection failure, serialization error, unhandled exception |Retry with exponential backoff; contact Red Hat Support if persistent
+|503 Service Unavailable |Service temporarily unavailable |Analytics service under heavy load, maintenance window, database offline |Retry after delay; check {ControllerName} status page
+|===
+
+== Error response format
+
+Error responses include a JSON body with diagnostic information:
+
+[source,json]
+----
+{
+  "detail": "Authentication credentials were not provided.",
+  "status": 401
+}
+----
+
+or
+
+[source,json]
+----
+{
+  "error": "Invalid collector name 'controller.invalid_table'",
+  "available_collectors": [
+    "controller.events_table",
+    "controller.unified_jobs_table",
+    "controller.main_host_daily"
+  ]
+}
+----
+
+*Recommendation:* Log the full error response body for troubleshooting. The `detail` or `error` field provides human-readable context.
+
+== Rate limiting behavior
+
+NOTE: As of AAP 2.7, the analytics API does not enforce server-side rate limiting. However, excessive request volume can degrade performance for all users. Red Hat recommends implementing client-side throttling to avoid overwhelming the analytics service.
+
+=== Recommended client-side throttling
+
+Even without enforced rate limits, follow these guidelines to avoid performance degradation:
+
+. *Limit concurrent requests:* Send at most 5 concurrent requests to the analytics API from a single BI tool.
+
+. *Add delay between requests:* Wait at least 200ms between consecutive requests when paging through large result sets.
+
+. *Batch collection triggers:* If triggering multiple collectors, space POST requests 1–2 seconds apart rather than sending them simultaneously.
+
+. *Schedule refreshes during off-peak hours:* Run large BI refresh jobs during low-automation periods (for example, overnight or weekends) to avoid competing with peak job execution traffic.
+
+=== Future rate limiting (planned)
+
+If rate limiting is implemented in a future release, the API will return:
+
+* *HTTP 429 Too Many Requests* when rate limits are exceeded.
+* *Retry-After header* indicating how many seconds to wait before retrying.
+
+*Example:*
+
+[source]
+----
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{
+  "detail": "Rate limit exceeded. Retry after 60 seconds.",
+  "status": 429
+}
+----
+
+Your BI tool should honor the `Retry-After` header value and wait the specified duration before retrying.
+
+== Retry strategies
+
+Transient errors (5xx codes, network timeouts) should trigger automatic retry with exponential backoff. Permanent errors (4xx codes except 429) should not retry.
+
+=== Recommended retry logic
+
+[source,py]
+----
+import time
+import requests
+
+def query_analytics_api_with_retry(url, token, max_retries=3):
+    """Query analytics API with exponential backoff retry."""
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+
+            # Success - return response
+            if response.status_code == 200:
+                return response.json()
+
+            # Client error (4xx) - do not retry except 429
+            if 400 <= response.status_code < 500:
+                if response.status_code == 429:
+                    # Rate limited - honor Retry-After header
+                    retry_after = int(response.headers.get('Retry-After', 60))
+                    print(f"Rate limited. Waiting {retry_after} seconds.")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    # Permanent client error - do not retry
+                    response.raise_for_status()
+
+            # Server error (5xx) - retry with exponential backoff
+            if response.status_code >= 500:
+                wait_time = 2 ** attempt  # 1s, 2s, 4s
+                print(f"Server error {response.status_code}. Retrying in {wait_time}s.")
+                time.sleep(wait_time)
+                continue
+
+        except requests.exceptions.Timeout:
+            wait_time = 2 ** attempt
+            print(f"Request timeout. Retrying in {wait_time}s.")
+            time.sleep(wait_time)
+            continue
+
+        except requests.exceptions.ConnectionError:
+            wait_time = 2 ** attempt
+            print(f"Connection error. Retrying in {wait_time}s.")
+            time.sleep(wait_time)
+            continue
+
+    # Max retries exhausted
+    raise Exception(f"Failed after {max_retries} retries")
+
+# Usage
+url = "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+token = "<your-token>"
+data = query_analytics_api_with_retry(url, token)
+----
+
+=== PowerShell retry example
+
+[source]
+----
+function Invoke-AnalyticsAPIWithRetry {
+    param(
+        [string]$Url,
+        [string]$Token,
+        [int]$MaxRetries = 3
+    )
+
+    $headers = @{
+        "Authorization" = "Bearer $Token"
+    }
+
+    for ($attempt = 0; $attempt -lt $MaxRetries; $attempt++) {
+        try {
+            $response = Invoke-RestMethod -Uri $Url -Headers $headers -Method Get -TimeoutSec 30
+            return $response
+        }
+        catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+
+            # Client error - do not retry except 429
+            if ($statusCode -ge 400 -and $statusCode -lt 500) {
+                if ($statusCode -eq 429) {
+                    $retryAfter = $_.Exception.Response.Headers["Retry-After"]
+                    Write-Host "Rate limited. Waiting $retryAfter seconds."
+                    Start-Sleep -Seconds $retryAfter
+                    continue
+                }
+                else {
+                    throw
+                }
+            }
+
+            # Server error - retry with exponential backoff
+            if ($statusCode -ge 500) {
+                $waitTime = [math]::Pow(2, $attempt)
+                Write-Host "Server error $statusCode. Retrying in $waitTime seconds."
+                Start-Sleep -Seconds $waitTime
+                continue
+            }
+        }
+    }
+
+    throw "Failed after $MaxRetries retries"
+}
+
+# Usage
+$url = "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+$token = "<your-token>"
+$data = Invoke-AnalyticsAPIWithRetry -Url $url -Token $token
+----
+
+=== Curl retry example (bash script)
+
+[source,sh]
+----
+#!/bin/bash
+# Query analytics API with retry
+
+URL="https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+TOKEN="<your-token>"
+MAX_RETRIES=3
+
+for attempt in $(seq 1 $MAX_RETRIES); do
+    HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" \
+        -H "Authorization: Bearer $TOKEN" \
+        "$URL")
+
+    # Success
+    if [ "$HTTP_CODE" -eq 200 ]; then
+        cat response.json
+        exit 0
+    fi
+
+    # Rate limited (429) - honor Retry-After header
+    if [ "$HTTP_CODE" -eq 429 ]; then
+        RETRY_AFTER=$(curl -sI -H "Authorization: Bearer $TOKEN" "$URL" | grep -i "Retry-After" | awk '{print $2}')
+        echo "Rate limited. Waiting $RETRY_AFTER seconds."
+        sleep "$RETRY_AFTER"
+        continue
+    fi
+
+    # Client error (4xx) - do not retry
+    if [ "$HTTP_CODE" -ge 400 ] && [ "$HTTP_CODE" -lt 500 ]; then
+        echo "Client error $HTTP_CODE. Not retrying."
+        cat response.json
+        exit 1
+    fi
+
+    # Server error (5xx) - retry with exponential backoff
+    if [ "$HTTP_CODE" -ge 500 ]; then
+        WAIT_TIME=$((2 ** (attempt - 1)))
+        echo "Server error $HTTP_CODE. Retrying in $WAIT_TIME seconds."
+        sleep "$WAIT_TIME"
+        continue
+    fi
+done
+
+echo "Failed after $MAX_RETRIES retries"
+exit 1
+----
+
+== Graceful degradation under load
+
+When the analytics service is under heavy load, response times increase and the risk of timeouts or 503 errors rises. Your BI tool should handle these conditions gracefully without cascading failures.
+
+=== Recommended patterns for graceful degradation
+
+. *Increase timeout duration:* Set HTTP client timeout to at least 60 seconds for analytics API requests (default is often 10–30 seconds). Large queries can take 30+ seconds to complete.
+
+. *Fall back to cached data:* If a refresh fails due to 503 Service Unavailable, display the last successfully retrieved dataset in your BI dashboard rather than showing an error to end users.
+
+. *Reduce query scope:* If full-retention queries (90 days) time out, reduce the time range to 30 or 7 days and try again.
+
+. *Schedule refreshes sequentially:* Avoid triggering multiple concurrent BI refresh jobs against the same analytics API endpoint. Space refresh jobs 5–10 minutes apart.
+
+. *Monitor and alert:* Track analytics API response times and error rates. Alert BI administrators if error rate exceeds 5% or response times exceed 60 seconds.
+
+=== Example: Graceful fallback in Python
+
+[source,py]
+----
+import requests
+from datetime import datetime, timedelta
+
+def get_analytics_data_with_fallback(url, token, cache_file="analytics_cache.json"):
+    """Query analytics API with fallback to cached data on failure."""
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        response = requests.get(url, headers=headers, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+
+        # Cache successful response
+        with open(cache_file, 'w') as f:
+            json.dump({"data": data, "cached_at": datetime.utcnow().isoformat()}, f)
+
+        return data
+
+    except (requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+        print(f"Analytics API request failed: {e}")
+
+        # Fall back to cached data if available
+        try:
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+                cached_at = datetime.fromisoformat(cached["cached_at"])
+                age_hours = (datetime.utcnow() - cached_at).total_seconds() / 3600
+
+                print(f"Using cached data from {age_hours:.1f} hours ago")
+                return cached["data"]
+
+        except FileNotFoundError:
+            print("No cached data available")
+            raise
+----
+
+== Impact on concurrent BI refresh jobs
+
+Running multiple BI refresh jobs concurrently against the same analytics API endpoint increases the risk of performance degradation and errors.
+
+=== Recommended scheduling patterns
+
+. *Sequential refresh:* Schedule BI refresh jobs sequentially with 5–10 minute gaps rather than simultaneously.
+
+   *Example schedule:*
+
+   * Job 1 (events_table): 04:00
+   * Job 2 (unified_jobs_table): 04:10
+   * Job 3 (main_host_daily): 04:20
+
+
+
+. *Stagger by collector:* If you must run concurrent refreshes, query different collectors in parallel rather than the same collector from multiple jobs.
+
+   *Good:* Job 1 queries events_table while Job 2 queries unified_jobs_table.
+
+   *Bad:* Job 1 and Job 2 both query events_table simultaneously.
+
+. *Limit parallelism:* Cap the number of concurrent BI refresh jobs querying the analytics API to 3 or fewer.
+
+. *Monitor queue depth:* If your BI tool supports queue monitoring, ensure the analytics API request queue does not exceed 10 pending requests. If it does, delay new refresh jobs until the queue drains.
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-analytics-api-bi-integration-patterns[Analytics API BI integration patterns]
+* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]

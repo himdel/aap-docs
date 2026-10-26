@@ -1,0 +1,258 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-connect-a-bi-tool-to-the-analytics-api"]
+
+= Connect a BI tool to the analytics API
+
+[role="_abstract"]
+You can connect external business intelligence (BI) tools such as Grafana, Power BI, or Tableau to the {PlatformNameShort} analytics API to visualize and analyze automation data.
+
+
+.Prerequisites
+
+* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
+* You have System Administrator or System Auditor role access to {ControllerName}.
+* Your {ControllerName} deployment is running AAP 2.7 or later.
+* You have installed and configured a BI tool that supports JSON REST API data sources (for example, Grafana 9.0 or later with the JSON API plugin).
+
+.Context
+
+The analytics API provides programmatic access to {ControllerName} data through HTTP endpoints. Unlike the Red Hat Hybrid Cloud Console {Analytics} interface, the analytics API lets you pull raw data into your own BI tool for custom dashboards, reports, and analysis.
+
+This procedure demonstrates the complete workflow from token creation through first API call using Grafana as a worked example. The same principles apply to other BI tools such as Power BI, Tableau, or Looker.
+
+.Procedure
+
+=== 1. Create an authentication token in {ControllerName}
+
+. From the navigation panel in {ControllerName}, select *Access* > *Users*.
+
+. Select your user account.
+
+. Select the *Tokens* tab.
+
+. Click *Add*.
+
+. In the *Application* field, leave the default (empty) or select an OAuth2 application if you have one configured.
+
+. In the *Scope* field:
+
+   * Select *Read* for read-only access (required for System Auditor role).
+   * Select *Write* if you need to trigger collection cycles programmatically (System Administrator only).
+
+
+
+. Click *Save*.
+
+. Copy the generated token and store it securely. You cannot retrieve the token value after closing the dialog.
+
+IMPORTANT: Treat this token like a password. Store it in a secrets manager or secure credential vault. Do not commit it to version control or share it in plain text.
+
+=== 2. Verify API access with a test request
+
+Before configuring your BI tool, verify that the analytics API is accessible and that your token works.
+
+. Open a terminal on a machine with network access to your {ControllerName}.
+
+. Run the following curl command to list available collectors:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/
+----
+
+   Replace `<your-token>` with the token you created in step 1, and `<controller-hostname>` with your {ControllerName} hostname or IP address.
+
+
+
+. Verify that the response is a JSON object listing available collectors. If you receive a 401 Unauthorized response, verify that the token is correct and has not been deleted.
+
+. Test retrieving data from a specific collector:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10
+----
+
+   This retrieves the 10 most recent job execution records.
+
+=== 3. Configure Grafana to connect to the analytics API
+
+This example uses Grafana with the Infinity data source plugin (formerly JSON API plugin). Adapt these steps for other BI tools.
+
+. Install the Infinity data source plugin in Grafana:
+
+[source,sh]
+----
+grafana-cli plugins install yesoreyeram-infinity-datasource
+----
+
+   Restart Grafana after installation.
+
+
+
+. In the Grafana web interface, navigate to *Configuration* > *Data Sources*.
+
+. Click *Add data source*.
+
+. Search for and select *Infinity*.
+
+. Configure the data source:
+
+   * *Name*: Ansible Analytics API
+   * *URL*: `https://<controller-hostname>/api/tower-analytics/v1/`
+   * *Auth*: Select *Forward OAuth Identity* or *Custom HTTP Headers*.
+   * *Custom HTTP Headers*:
+     * Header: `Authorization`
+     * Value: `Bearer <your-token>`
+
+
+
+. Click *Save & Test* to verify the connection.
+
+=== 4. Create a dashboard panel querying job execution data
+
+. Create a new dashboard in Grafana.
+
+. Click *Add panel*.
+
+. In the *Query* tab:
+
+   * *Data source*: Select *Ansible Analytics API*.
+   * *Type*: Select *JSON*.
+   * *Parser*: Select *Backend*.
+   * *Method*: Select *GET*.
+   * *URL*: `controller.unified_jobs_table/?limit=100&order_by=-created`
+
+
+
+. In the *Rows / Root selector* field, enter `results` (the JSON path to the array of records).
+
+. In the *Columns* section, define the fields to display:
+
+   * `id` (job ID)
+   * `name` (job name)
+   * `organization_id` (organization ID)
+   * `status` (job status)
+   * `created` (job start time)
+
+
+
+. In the *Transform* tab, add a *Convert field type* transformation to parse `created` as a timestamp.
+
+. In the *Visualization* tab, select *Table* or *Time series* depending on your analysis needs.
+
+. Click *Apply* to save the panel.
+
+=== 5. Create a panel with organization-filtered data
+
+To filter data by organization, use Grafana's filter or transformation features after retrieving the data.
+
+. Add a new panel to your dashboard.
+
+. Configure the query to retrieve job data:
+
+   * *URL*: `controller.unified_jobs_table/?limit=1000&order_by=-created`
+   * *Rows / Root selector*: `results`
+
+
+
+. In the *Transform* tab, add a *Filter by value* transformation:
+
+   * *Field*: `organization_id`
+   * *Match*: Select your organization ID(s).
+
+
+
+. Configure the visualization to display the filtered data.
+
+NOTE: The analytics API does not provide a server-side `?organization_id=<id>` filter parameter. Always filter by organization in your BI tool after retrieving the data.
+
+=== 6. Create a panel with joined event and job data
+
+To correlate task execution details with job metadata, join two API calls in Grafana.
+
+. Add a new panel.
+
+. Add the first query to retrieve events:
+
+   * *URL*: `controller.events_table/?limit=1000&order_by=-job_created`
+   * *Rows / Root selector*: `results`
+   * *Alias*: `events`
+
+
+
+. Add a second query to retrieve jobs:
+
+   * *URL*: `controller.unified_jobs_table/?limit=1000&order_by=-created`
+   * *Rows / Root selector*: `results`
+   * *Alias*: `jobs`
+
+
+
+. In the *Transform* tab, add a *Join by field* transformation:
+
+   * *Join on*: `events.job_id` = `jobs.id`
+   * *Mode*: *Inner join*
+
+
+
+. Select the fields to display from both datasets:
+
+   * From `events`: `task_name`, `module`, `host_id`
+   * From `jobs`: `organization_id`, `status`, `created`
+
+
+
+. Configure the visualization to show the joined data.
+
+.Result
+
+Your BI tool is now connected to the analytics API and can query {ControllerName} data. You can create custom dashboards, reports, and visualizations based on the raw per-collector data feeds.
+
+.Post-requisites
+
+=== Set up a refresh schedule
+
+Configure your BI tool to refresh data on a schedule that aligns with the analytics collection window:
+
+. Determine the analytics collection interval (default: 4 hours). For how to locate this setting, see xref:ref-controller-analytics-gathering[Analytics gathering].
+
+. Schedule BI tool refresh to run at least *1–2 minutes after the collection window closes* to allow collection processing to complete.
+
+   For example, if collections run at 00:00, 04:00, 08:00, and 12:00, schedule refresh at 04:02, 08:02, 12:02, and 16:02.
+
+. Do not schedule refresh intervals shorter than the collection window interval. The analytics API is batch-only; real-time streaming is not supported.
+
+For collection timing and processing time details, see xref:ref-controller-analytics-gathering[Analytics gathering].
+
+=== Monitor for stale data
+
+Verify that analytics data is current by querying partition timestamp fields:
+
+* For job events: Query `job_created` or `job_modified` in `controller.events_table` and verify that the most recent timestamp is within the expected collection lag.
+* For daily collectors: Query `timestamp` in `controller.main_host_daily`.
+* For snapshot collectors: Query `timestamp` in `controller.cluster_info`.
+
+For a complete data freshness verification procedure, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+=== Secure your BI tool database
+
+Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility. Apply appropriate security controls:
+
+* Enable authentication and role-based access control (RBAC) in your BI tool.
+* Encrypt BI tool database storage at rest.
+* Configure data retention policies to comply with your organization's security requirements.
+* Audit BI tool access logs to detect unauthorized data access.
+
+For the shared responsibility model, see xref:ref-analytics-api-reference[Analytics API reference].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-controller-analytics-gathering[Analytics gathering]
+* xref:proc-controller-configure-analytics[Configure {Analytics}]

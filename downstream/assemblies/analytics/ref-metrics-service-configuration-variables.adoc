@@ -1,0 +1,112 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-metrics-service-configuration-variables"]
+
+= Metrics service configuration variables
+
+[role="_abstract"]
+Review configuration variables to customize metrics service deployment, database connections, security settings, and operational parameters.
+
+
+== Keywords
+
+* metrics service
+* configuration variables
+* inventory variables
+* analytics_retention_days
+* awx_database
+
+== Inventory variables reference
+
+=== Required variables for automationmetrics group
+
+The following variables must be defined when deploying metrics service with the containerized installer:
+
+[options="header"]
+|===
+|Variable |Default |Required/Optional |Description
+|`automationmetrics_pg_host` |(none) |*Required* |PostgreSQL host for the metrics database
+|`automationmetrics_pg_password` |(none) |*Required** |Password for the metrics database user. *Not required when `automationmetrics_pg_cert_auth: true` is set.
+|`automationmetrics_controller_read_pg_host` |(none) |*Required** |Hostname of the existing {ControllerName} (AWX) PostgreSQL database. In AIO deployments, this is typically the same value as `automationmetrics_pg_host`. In multi-node deployments, set this to the {ControllerName}'s database host. *Not required when `automationmetrics_pg_cert_auth: true` is set.
+|`automationmetrics_controller_read_pg_password` |(none) |*Required** |Password for the read-only controller database user. *Not required when `automationmetrics_pg_cert_auth: true` is set.
+|===
+
+=== Optional variables with defaults
+
+[options="header"]
+|===
+|Variable |Default |Description
+|`automationmetrics_pg_port` |`5432` |PostgreSQL port
+|`automationmetrics_pg_database` |`metrics_service` |Database name
+|`automationmetrics_pg_username` |`metrics_service` |Database user
+|`automationmetrics_api_port` |`8006` |Port the metrics service API listens on (Gunicorn)
+|`automationmetrics_nginx_http_port` |`8087` |nginx HTTP port (redirects to HTTPS)
+|`automationmetrics_nginx_https_port` |`8450` |nginx HTTPS port
+|`automationmetrics_pg_cert_auth` |`false` |Use certificate authentication instead of passwords
+|===
+
+When `automationmetrics_pg_cert_auth: true`, the password variables marked Required* (`automationmetrics_pg_password` and `automationmetrics_controller_read_pg_password`) are not required. The service uses PostgreSQL certificate-based authentication instead.
+
+== Analytics payload retention parameters
+
+The `cleanup_metrics_data` scheduled task manages analytics payload retention. By default, the task resolves the retention period dynamically from the {ControllerName} `cleanup_jobs` schedule. Use the following parameters to override this behavior or to supply values for manual task runs.
+
+[options="header"]
+|===
+|Parameter |Default |Required/Optional |Description
+|`analytics_retention_days` |`None` ({ControllerNameStart}-driven) |Optional |Number of days to retain analytics payloads in the `AnalyticsPayload` table. When set to `None` (the default, or when omitted from scheduled task arguments), retention is resolved dynamically from the {ControllerNameStart} `cleanup_jobs` schedule — it does *not* default to 90 days in this case. An explicit integer value overrides the dynamic resolution and forces a fixed retention period. Values of `0` or negative integers are rejected with an error.
+|`awx_database` |`awx` |Optional |Django database alias for the {ControllerNameStart} database connection. Used by `get_controller_retention_days()` when resolving the `cleanup_jobs` schedule. Override this value if your {ControllerNameStart} database is configured under a different Django alias.
+|===
+
+=== Retention resolution rules
+
+When `analytics_retention_days` is `None`, the `cleanup_metrics_data` task resolves retention from the {ControllerNameStart} `cleanup_jobs` schedule using the following rules:
+
+. Only enabled schedules are considered. Disabled schedules are ignored.
+. The lowest valid positive integer `days` value among enabled schedules wins.
+. When two schedules have the same `days` value, the schedule with the soonest `next_run` timestamp wins.
+. A 90-day fallback applies when the {ControllerNameStart} is unreachable or when no valid enabled schedules with a positive `days` value exist.
+
+IMPORTANT: Setting `analytics_retention_days` to `0` or a negative value in a manual task run is rejected with an error. To use the dynamic {ControllerNameStart}-driven retention for a manual run, omit `analytics_retention_days` from the task arguments or set it to `None`.
+
+== Indirect node audit data retention
+
+Collection alone is not sufficient: the source audit records must still exist in the controller database when a collection runs. The controller retains indirect node audit records in the `main_indirectmanagednodeaudit` table for a limited period, then purges older records. If audit records are purged before they are collected, that data is lost and cannot be recovered. The controller retention period does not apply to metrics service data. The controller stores raw indirect node audit records (one per host per job), which grow large and are purged after 7 days by default. Metrics service stores only aggregated daily counts by collection and module, which are small and can be retained for much longer.
+
+[options="header"]
+|===
+|Variable |Default |Level |Description
+|`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` |7 |{ControllerNameStart} setting |Number of days the {ControllerName} retains indirect node audit records before purging them. This is an {ControllerName} setting, not a metrics service `automationmetrics_*` inventory variable. It is set as a default and can be overridden with an environment variable or settings file. It is not exposed as a controller UI or API configuration setting.
+|===
+
+NOTE: The controller purges indirect node audit records after the retention period (7 days by default). Any process that reads these records, such as the metrics service daily collection and the metrics utility gather, must run within the retention window, or purged records are lost permanently. If you run the metrics utility gather less frequently than the retention period (for example, monthly), increase `INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` to cover the full interval between gathers.
+
+{ControllerNameStart} has four indirect-node-related settings. Only one is exposed through a supported customer interface. The other three are Django settings, changeable only through an environment variable or settings file:
+
+[options="header"]
+|===
+|Variable |Default |Customer-togglable |Description
+|`INDIRECT_NODE_COUNTING_ENABLED` |True (AAP 2.7) / False (AAP 2.6) |Yes. *Settings* > *System UI*, the `/api/v2/settings/system/` API, or `awx-manage set_indirect_node_counting` |Controls whether the controller records indirect node audit data at all.
+|`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` |7 |No. Settings file or environment variable only |Retention window for raw audit records, described above.
+|`INDIRECT_HOST_QUERY_FALLBACK_MINUTES` |60 |No. Settings file or environment variable only |How long the controller waits before the hourly fallback job picks up a job whose indirect node audit record was not recorded by the immediate path.
+|`INDIRECT_HOST_QUERY_FALLBACK_GIVEUP_DAYS` |3 |No. Settings file or environment variable only |How long the controller keeps retrying a job whose events failed to process before giving up.
+|===
+
+NOTE: If a job's events fail to process for longer than `INDIRECT_HOST_QUERY_FALLBACK_GIVEUP_DAYS` (3 days by default), the controller gives up and never creates an audit record for that job. This loss is permanent and independent of the 7-day retention window. Increasing `INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS` does not recover it, because there was never a record to purge.
+
+== Events collector settings
+
+The events collector (`main_jobevent_service`) processes job event data to extract collection, module, and role usage statistics. These variables are configurable as Django settings or environment variables without a code change. Use them to control collection volume on large deployments.
+
+[options="header"]
+|===
+|Variable |Default |Description
+|`JOBEVENT_ROW_LIMIT` |200,000 |Maximum number of job event rows to process per hourly collection cycle. Set to 0 for unlimited processing.
+|`JOBEVENT_JOB_LIMIT` |1,000 |Maximum number of jobs to process for event data per hourly collection cycle. Set to 0 for unlimited processing.
+|===
+
+*WARNING:* Setting `JOBEVENT_ROW_LIMIT` or `JOBEVENT_JOB_LIMIT` to 0 removes the limit entirely, causing the collector to process all available events. On large deployments with high job volumes, this can significantly increase collection time and database load. To effectively disable event collection for performance reasons, set both values to 1.
+
+== Related links
+
+* Install metrics service with containerized installer

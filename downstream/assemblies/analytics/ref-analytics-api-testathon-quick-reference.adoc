@@ -1,0 +1,504 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-analytics-api-testathon-quick-reference"]
+
+= Analytics API testathon quick reference
+
+[role="_abstract"]
+*Target audience:* Mini-testathon participants (Oct 16-17, 2026)
+
+
+*Target audience:* Mini-testathon participants (Oct 16-17, 2026)
+
+*Purpose:* Quick-reference guide for E2E validation of the analytics API
+
+*E2E test plan:* link:https://docs.google.com/spreadsheets/d/1f2yoxlBmvCkbioPEyc6wtHBLcgs_5dDt/edit?gid=1983120070[Test plan spreadsheet]
+
+
+== Quick links
+
+* link:#authentication-setup[Authentication setup]
+* link:#available-endpoints[Available endpoints]
+* link:#common-test-queries[Common test queries]
+* link:#test-data-setup[Test data setup]
+* link:#expected-response-formats[Expected response formats]
+* link:#troubleshooting[Troubleshooting]
+
+
+== Authentication setup
+
+=== Step 1: Create a token in {ControllerName}
+
+. Navigate to *Access* > *Users* in {ControllerName} UI.
+. Select your test user account.
+. Click the *Tokens* tab.
+. Click *Add*.
+. Scope: Select *Write* (for System Admin) or *Read* (for System Auditor).
+. Click *Save* and copy the token.
+
+*Test users:*
+
+* System Admin: Use your admin account
+* System Auditor: Use your auditor test account (if available)
+
+=== Step 2: Test authentication
+
+[source,sh]
+----
+export TOKEN="<your-token>"
+export CONTROLLER="<controller-hostname>"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  https://$CONTROLLER/api/tower-analytics/v1/
+----
+
+*Expected response:* JSON object listing available collectors.
+
+*If you get 401 Unauthorized:* Token is invalid. Regenerate and try again.
+
+
+== Available endpoints
+
+=== Base URL
+
+[source]
+----
+https://<controller-hostname>/api/tower-analytics/v1/
+----
+
+=== Per-collector endpoints
+
+[options="header"]
+|===
+|Collector name |Collector type |Data content
+|`controller.events_table` |Hourly (CSV) |Job events, task execution details
+|`controller.unified_jobs_table` |Hourly (CSV) |Job execution records
+|`controller.workflow_job_node_table` |Hourly (CSV) |Workflow job nodes
+|`controller.main_host_daily` |Daily |Daily host activity aggregates
+|`controller.main_hostmetric` |Daily |Host performance metrics
+|`controller.main_indirectmanagednodeaudit` |Daily |Indirect node audit records
+|`controller.cluster_info` |Snapshot |Cluster configuration and topology
+|===
+
+=== Endpoint patterns
+
+*GET (read data):*
+
+[source]
+----
+GET /api/tower-analytics/v1/<collector-name>/
+----
+
+*POST (trigger collection):*
+
+[source]
+----
+POST /api/tower-analytics/v1/<collector-name>/collect
+----
+
+
+== Common test queries
+
+=== Test 1: Basic GET (retrieve data)
+
+[source,sh]
+----
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10"
+----
+
+*Expected:* JSON response with 10 job records.
+
+*Validates:* TP-1 (Customer Experience), TP-2 (Authentication)
+
+=== Test 2: Trigger collection (POST)
+
+[source,sh]
+----
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/collect
+----
+
+*Expected:* 201 Created response with collection job details.
+
+*Validates:* TP-2 (Authentication), TP-3 (RBAC)
+
+NOTE: System Auditor should get 403 Forbidden on POST.
+
+=== Test 3: 30-day date filter query
+
+[source,sh]
+----
+# Calculate 30 days ago in UTC
+SINCE=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?since=$SINCE&limit=100"
+----
+
+*Expected:* JSON response with jobs created in the last 30 days.
+
+*Validates:* TP-4 (Date filtering and pagination)
+
+=== Test 4: Full-retention query (90 days)
+
+[source,sh]
+----
+# No since/until filters = all available data
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/?limit=10000"
+----
+
+*Expected:* Up to 10,000 event records (may be fewer if less data exists).
+
+*Validates:* TP-4 (Date filtering), TP-5 ({ControllerNameStart} data coverage)
+
+=== Test 5: Pagination test
+
+[source,sh]
+----
+# Page 1
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/?limit=100&offset=0"
+
+# Page 2
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/?limit=100&offset=100"
+----
+
+*Expected:* Different records in each response. Use the `next` URL from the response.
+
+*Validates:* TP-4 (Pagination)
+
+=== Test 6: Organization filtering (client-side)
+
+[source,sh]
+----
+# Retrieve all jobs, then filter by organization_id in your tool
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?limit=1000" | \
+  jq '.results[] | select(.organization_id == 1)'
+----
+
+*Expected:* Jobs belonging to organization ID 1.
+
+*Validates:* TP-3 (RBAC and org scoping)
+
+NOTE: No server-side org filter exists. Filter client-side.
+
+=== Test 7: Indirect node data availability
+
+[source,sh]
+----
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.main_indirectmanagednodeaudit/?limit=10"
+----
+
+*Expected:* JSON response with indirect node audit records (if available in test data).
+
+*Validates:* TP-5 ({ControllerNameStart} data coverage - indirect nodes)
+
+=== Test 8: Performance baseline (large query)
+
+[source,sh]
+----
+# Time a 10,000-row query
+time curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/?limit=10000" \
+  > /dev/null
+----
+
+*Expected:* Response time under 5 seconds for 10,000 rows.
+
+*Validates:* TP-8 (Performance expectations)
+
+=== Test 9: Concurrent request test
+
+[source,sh]
+----
+# Run 3 queries in parallel
+for i in {1..3}; do
+  curl -H "Authorization: Bearer $TOKEN" \
+    "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?limit=100" &
+done
+wait
+----
+
+*Expected:* All 3 requests succeed without errors.
+
+*Validates:* TP-8 (Performance under concurrent load)
+
+=== Test 10: RBAC - System Auditor read-only
+
+*Setup:* Switch to System Auditor token.
+
+[source,sh]
+----
+export AUDITOR_TOKEN="<auditor-token>"
+
+# GET should succeed
+curl -H "Authorization: Bearer $AUDITOR_TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10"
+
+# POST should fail with 403 Forbidden
+curl -X POST -H "Authorization: Bearer $AUDITOR_TOKEN" \
+  https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/collect
+----
+
+*Expected:*
+
+* GET: 200 OK with data
+* POST: 403 Forbidden
+
+*Validates:* TP-3 (RBAC and auditor limitations)
+
+
+== Test data setup
+
+=== Expected test environment data
+
+The test environment should contain:
+
+* *At least 3 organizations* (for org filtering tests)
+* *At least 100 jobs* distributed across the last 30 days
+* *At least 1,000 job events* (for pagination and performance tests)
+* *At least 1 indirect node audit record* (for indirect node coverage test)
+
+=== Generating test data (if needed)
+
+If the test environment is empty, run jobs to populate analytics data:
+
+. Create and run at least 10 job templates across different organizations.
+
+. Trigger analytics collection:
+
+[source,sh]
+----
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/collect
+----
+
+. Wait 1–2 minutes for collection to complete.
+
+. Query to verify data exists:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10"
+----
+
+=== Verifying data freshness
+
+Check the partition timestamp field to confirm data is current:
+
+[source,sh]
+----
+# Most recent job event timestamp
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/?order_by=-job_created&limit=1" | \
+  jq '.results[0].job_created'
+----
+
+*Expected:* Timestamp within the last few hours (if recent jobs ran).
+
+
+== Expected response formats
+
+=== Successful GET response
+
+[source,json]
+----
+{
+  "count": 102762,
+  "next": "https://<controller>/api/tower-analytics/v1/controller.events_table/?limit=100&offset=100",
+  "previous": null,
+  "results": [
+    {
+      "id": 12345,
+      "job_id": 678,
+      "task_name": "Install nginx",
+      "module": "yum",
+      "host_id": 42,
+      "failed": false,
+      "job_created": "2026-10-15T12:30:00Z"
+    }
+  ]
+}
+----
+
+*Key fields:*
+
+* `count`: Total number of records available (not just this page)
+* `next`: URL to retrieve the next page (null if this is the last page)
+* `previous`: URL to retrieve the previous page (null if this is the first page)
+* `results`: Array of records for this page
+
+=== Successful POST response (collection trigger)
+
+[source,json]
+----
+{
+  "status": "Collection triggered",
+  "collector": "controller.events_table",
+  "job_id": 789
+}
+----
+
+=== Error response (401 Unauthorized)
+
+[source,json]
+----
+{
+  "detail": "Authentication credentials were not provided.",
+  "status": 401
+}
+----
+
+=== Error response (403 Forbidden)
+
+[source,json]
+----
+{
+  "detail": "You do not have permission to perform this action.",
+  "status": 403
+}
+----
+
+=== Error response (404 Not Found)
+
+[source,json]
+----
+{
+  "error": "Invalid collector name 'controller.invalid_table'",
+  "available_collectors": [
+    "controller.events_table",
+    "controller.unified_jobs_table"
+  ]
+}
+----
+
+
+== Troubleshooting
+
+=== Issue: 401 Unauthorized
+
+*Cause:* Token is invalid, expired, or deleted.
+
+*Solution:*
+
+. Verify token exists in {ControllerName} (*Access* > *Users* > *Tokens*).
+. Regenerate token if necessary.
+. Verify `Authorization: Bearer <token>` header format (note the space after "Bearer").
+
+=== Issue: 403 Forbidden on POST
+
+*Cause:* System Auditor attempting to trigger collection.
+
+*Solution:*
+
+. Verify you are using a System Administrator token for POST requests.
+. System Auditor can only GET (read), not POST (trigger).
+
+=== Issue: Empty results array despite recent jobs
+
+*Cause:* Collection has not run since jobs completed.
+
+*Solution:*
+
+. Manually trigger collection:
+
+[source,sh]
+----
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://$CONTROLLER/api/tower-analytics/v1/controller.events_table/collect
+----
+
+. Wait 1–2 minutes for collection to complete.
+
+. Query again.
+
+=== Issue: Data older than 7 days missing for indirect nodes
+
+*Cause:* Indirect node audit records are purged after 7 days (controller-side constraint).
+
+*Solution:* This is expected behavior. Only the last 7 days of indirect node data are available.
+
+=== Issue: Query times out or takes >30 seconds
+
+*Cause:* Large result set (100,000+ rows) or analytics service under load.
+
+*Solution:*
+
+. Reduce query scope with `since` and `until` filters.
+. Reduce `limit` to 1,000 or fewer rows per page.
+. Try again during off-peak hours.
+
+=== Issue: Different response count on repeated queries
+
+*Cause:* Data is changing (new jobs running, old data purged).
+
+*Solution:* This is expected behavior. The analytics API reflects live data.
+
+=== Issue: No indirect node data available
+
+*Cause:* Test environment may not have run jobs with indirect nodes, or data aged out.
+
+*Solution:*
+
+. Verify indirect node jobs ran in the last 7 days.
+. Check if `controller.main_indirectmanagednodeaudit` collector is enabled and populated.
+. Skip indirect node tests if no test data exists.
+
+=== Issue: Pagination `next` URL returns same data
+
+*Cause:* Using `limit` without `offset`, or `offset` not incrementing.
+
+*Solution:* Use the `next` URL from the response, or increment `offset` by `limit` value:
+
+[source,sh]
+----
+# Page 1: offset=0
+# Page 2: offset=100
+# Page 3: offset=200
+----
+
+
+== RBAC clarification (pending)
+
+*Open question (Oct 14, 2026):* Whether organization-scoped users (Organization Admin, Organization Auditor) have analytics API access.
+
+*Current assumption:* Only System Administrator and System Auditor roles have access.
+
+*Impact on testing:* If org-scoped users are granted access before the testathon, test TP-3 (RBAC and org scoping) with an Organization Admin account to verify org-level data filtering works.
+
+*Status:* Awaiting SME confirmation.
+
+
+== Test plan reference
+
+*Full E2E test plan:* link:https://docs.google.com/spreadsheets/d/1f2yoxlBmvCkbioPEyc6wtHBLcgs_5dDt/edit?gid=1983120070[Google Sheets]
+
+*Test coverage areas:*
+
+* TP-1: Customer experience (end-to-end BI integration workflow)
+* TP-2: Authentication (token creation, header format)
+* TP-3: RBAC and org scoping (role limitations, org filtering)
+* TP-4: Date filtering and pagination (since/until, limit/offset)
+* TP-5: {ControllerNameStart} data coverage (all collectors, indirect nodes)
+* TP-6: Security boundaries (data allowlist, excluded fields)
+* TP-7: Deployment support (Containerized, OCP, Managed Cloud)
+* TP-8: Performance expectations (response times, concurrent load)
+
+
+== Additional resources
+
+For detailed documentation, see:
+
+* xref:ref-analytics-api-reference[Analytics API reference] (AAP-89154)
+* Analytics API data model and retention (AAP-89154)
+* BI integration patterns (AAP-95129)
+* Error handling and resilience (AAP-97454)
+
+
+*Questions during testathon?* Contact the ANSTRAT-1587 dev team in Slack: #wg-anstrat-1587-byobi

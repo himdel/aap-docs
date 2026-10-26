@@ -1,17 +1,25 @@
 :_mod-docs-content-type: ASSEMBLY
 
-ifdef::context[:parent-context: {context}]
-
 [id="assembly-using-data-dictionary"]
-
-:context: assembly-using-job-explorer-ctxt
 
 = {Analytics} Data Dictionary
 
 [role="_abstract"]
-{Analytics} Data is sent to the Red Hat Hybrid Cloud Console (HCC) to provide detailed analytics on your automation.
+{Analytics} sends data fields and schema to the Red Hat Hybrid Cloud Console. This topic describes the available data dictionary and how to verify data currency.
 
-The link:https://access.redhat.com/articles/7124201[Ansible Automation Platform - Data Dictionary] KIE base article outlines the data dictionary for the information collected by {Analytics} from the {PlatformName}  {ControllerName}, also known as Automation Execution.
 
-ifdef::parent-context[:context: {parent-context}]
-ifndef::parent-context[:!context:]
+== Overview
+
+The data dictionary outlines the information collected by {Analytics} from the {PlatformName} {ControllerName}, also known as Automation Execution. The linked KB article documents field-level schema definitions for all collected data tables, but does not include collection metadata fields (such as a `last_collected_at` field) because no such metadata field exists in the public analytics API.
+
+== Data currency verification
+
+No collection-status or backfill-status endpoint exists in the public {Analytics} API. To confirm that a collection cycle has completed and that data is current, query the partition timestamp fields documented in the related links at the end of this topic. For a step-by-step verification procedure, see the related links at the end of this topic.
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]

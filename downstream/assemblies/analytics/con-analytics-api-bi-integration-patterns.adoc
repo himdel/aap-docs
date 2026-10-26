@@ -1,0 +1,563 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-analytics-api-bi-integration-patterns"]
+
+= Analytics API BI integration patterns
+
+[role="_abstract"]
+Business intelligence (BI) tools can integrate with the {PlatformNameShort} analytics API using documented trigger patterns, customer-side join queries, and real-world workflow scenarios. This topic provides prescriptive guidance for BI architects and data engineers.
+
+
+== Prerequisites
+
+* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
+* You have System Administrator or System Auditor role access to {ControllerName}.
+* Your {ControllerName} deployment is running AAP 2.7 or later.
+* You have a BI tool that supports JSON REST API data sources (for example, Grafana, Power BI, Tableau, or Looker).
+
+== Recommended trigger patterns for BI connectors
+
+The analytics API supports two documented trigger patterns for data collection: manual POST and scheduled POST. Choose the pattern that fits your BI tool's capabilities and refresh schedule.
+
+=== Pattern 1: Manual POST to /collect endpoint
+
+Use this pattern when your BI tool supports triggering external API calls before running a refresh.
+
+*When to use:*
+
+* Your BI refresh job can execute a pre-refresh webhook or HTTP request.
+* You want to guarantee fresh data before every BI query.
+* You need to trigger collection on demand (for example, after a major automation run completes).
+
+*How it works:*
+
+. Your BI tool's pre-refresh script sends a POST request to the collector endpoint:
+
+[source,sh]
+----
+curl -X POST \
+  -H "Authorization: Bearer <your-token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+----
+
+. The analytics API triggers a collection cycle for that collector.
+
+. The collection completes (typically 11–33 seconds depending on event volume).
+
+. Your BI tool queries the GET endpoint to retrieve the fresh data:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+----
+
+IMPORTANT: Wait for collection to complete before querying data. Allow at least 1–2 minutes between the POST trigger and the GET query to account for collection processing time. For expected processing times by event volume, see Understand analytics API architecture and performance.
+
+*Deduplication behavior:* Concurrent POST requests to the same collector trigger only a single collection cycle. If multiple BI jobs POST to the same endpoint simultaneously, the analytics API deduplicates the requests and runs one collection.
+
+=== Pattern 2: Scheduled POST via recurring task
+
+Use this pattern when your BI tool cannot trigger external API calls but can query on a schedule.
+
+*When to use:*
+
+* Your BI tool supports only GET requests (no pre-refresh webhook capability).
+* You want to align collection timing with BI refresh schedules without embedding trigger logic in the BI tool.
+* You prefer server-side collection scheduling managed by {ControllerName}.
+
+*How it works:*
+
+. Create a recurring task in {ControllerName} that POSTs to the collector endpoints on a cron schedule:
+
+[source,sh]
+----
+curl -X POST \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Analytics collection for BI tool",
+    "enabled": true,
+    "rrule": "DTSTART;TZID=America/New_York:20261015T040000 RRULE:FREQ=DAILY;INTERVAL=1",
+    "unified_job_template": <template-id>,
+    "extra_data": {
+      "collector": "controller.events_table"
+    }
+  }' \
+  https://<controller-hostname>/api/v2/schedules/
+----
+
+. The controller triggers collection on the cron schedule (for example, daily at 4:00 AM).
+
+. Your BI tool queries the GET endpoint 1–2 minutes after the scheduled collection time to retrieve fresh data.
+
+NOTE: For detailed server-side scheduling configuration, see AAP-90679 (controller-side scheduling option).
+
+=== Pattern 3: GET-based auto-trigger (POC only, not supported)
+
+*Do not use this pattern in production.* A GET-based auto-trigger mechanism exists as a proof-of-concept (PR #450) but is not finalized or supported in AAP 2.7. Querying an empty collector endpoint does not automatically trigger collection in the current release.
+
+Use Pattern 1 (manual POST) or Pattern 2 (scheduled POST) instead.
+
+== Customer-side join patterns
+
+The analytics API serves raw, non-pre-joined per-collector data feeds. Your BI tool must perform joins between collectors to answer cross-table questions such as "which tasks ran in jobs for organization X?"
+
+The following SQL examples are copy-pasteable into SQL-based BI tools (Power BI, Tableau, Grafana). Adapt the syntax for your BI tool's query language.
+
+=== Join events to jobs (task execution → job metadata)
+
+*Use case:* Correlate task execution details (module used, host, success) with job metadata (organization, start time, status).
+
+*SQL example (Grafana, Power BI, Tableau):*
+
+[source,sql]
+----
+SELECT
+  e.task_name,
+  e.module,
+  e.host_id,
+  e.event_created,
+  j.organization_id,
+  j.name AS job_name,
+  j.status AS job_status,
+  j.created AS job_start
+FROM events_table AS e
+INNER JOIN unified_jobs_table AS j ON e.job_id = j.id
+WHERE j.organization_id = <your-org-id>
+  AND j.created >= '2026-10-01T00:00:00Z'
+ORDER BY j.created DESC;
+----
+
+*Power BI M language example:*
+
+[source]
+----
+let
+  Events = Json.Document(Web.Contents(
+    "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/",
+    [Headers=[Authorization="Bearer <token>"]]
+  )),
+  Jobs = Json.Document(Web.Contents(
+    "https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/",
+    [Headers=[Authorization="Bearer <token>"]]
+  )),
+  JoinedData = Table.NestedJoin(
+    Events[results], {"job_id"},
+    Jobs[results], {"id"},
+    "JobDetails", JoinKind.Inner
+  )
+in
+  JoinedData
+----
+
+*Tableau (using Custom SQL in data source):*
+
+Tableau supports the SQL example above directly in the Custom SQL connector. Use the Grafana SQL example as-is.
+
+=== Join jobs to organizations (job execution → organization attribution)
+
+*Use case:* Filter or group job execution records by organization name.
+
+*SQL example:*
+
+[source,sql]
+----
+SELECT
+  j.id AS job_id,
+  j.name AS job_name,
+  j.organization_id,
+  o.name AS organization_name,
+  j.status,
+  j.created
+FROM unified_jobs_table AS j
+LEFT JOIN organizations AS o ON j.organization_id = o.id
+WHERE j.organization_id IN (<org-id-1>, <org-id-2>)
+  AND j.created >= '2026-09-01T00:00:00Z'
+ORDER BY j.created DESC;
+----
+
+NOTE: The `organizations` table is available through the analytics API if the organization collector is enabled. Verify availability with your analytics administrator.
+
+=== Host reporting via organization-bearing feeds
+
+*Use case:* Report on host automation activity grouped by organization.
+
+*SQL example:*
+
+[source,sql]
+----
+SELECT
+  h.host_id,
+  h.organization_id,
+  o.name AS organization_name,
+  h.automated_counter,
+  h.last_automation
+FROM main_host_daily AS h
+LEFT JOIN organizations AS o ON h.organization_id = o.id
+WHERE h.organization_id = <your-org-id>
+  AND h.last_automation >= '2026-09-01'
+ORDER BY h.last_automation DESC;
+----
+
+*DAX example (Power BI calculated table):*
+
+[source]
+----
+HostsByOrg =
+NATURALINNERJOIN(
+    main_host_daily,
+    organizations
+)
+----
+
+== Derive collection name and version per task
+
+To report which collection version was used for each task execution, join events to jobs and parse the collection name from the event's resolved_action FQCN.
+
+*SQL example*
+
+[source,sh]
+----
+ SELECT
+ e.event_id,
+ e.resolved_action,
+ SPLIT_PART(e.resolved_action, '.', 1) || '.' || SPLIT_PART(e.resolved_action, '.', 2) AS collection_name,
+ j.installed_collections->>(SPLIT_PART(e.resolved_action, '.', 1) || '.' || SPLIT_PART(e.resolved_action, '.', 2)) AS collection_version
+ FROM controller.main_jobevent_service AS e
+ INNER JOIN controller.unified_jobs_dashboard AS j
+ ON e.cluster_id = j.cluster_id AND e.job_remote_id = j.id
+ WHERE e.resolved_action IS NOT NULL
+----
+
+*Power BI M code example*
+
+[source,sh]
+----
+ let
+ Events = /* GET controller.main_jobevent_service */,
+ Jobs = /* GET controller.unified_jobs_dashboard */,
+
+----
+
+*Join events to jobs*
+
+[source,sh]
+----
+ Joined = Table.NestedJoin(
+ Events, {"cluster_id", "job_remote_id"},
+ Jobs, {"cluster_id", "id"},
+ "JobData", JoinKind.Inner
+ ),
+
+----
+
+*Extract collection name from FQCN (first two parts)*
+
+[source,sh]
+----
+ ExtractCollection = Table.AddColumn(Joined, "collection_name", each
+ let parts = Text.Split([resolved_action], ".")
+ in if List.Count(parts) >= 2
+ then parts{0} & "." & parts{1}
+ else null
+ ),
+
+----
+
+*Expand job data*
+
+[source,sh]
+----
+ ExpandJobs = Table.ExpandRecordColumn(ExtractCollection, "JobData", {"installed_collections"}),
+
+----
+
+*Look up version from installed_collections*
+
+[source,sh]
+----
+ AddVersion = Table.AddColumn(ExpandJobs, "collection_version", each
+ try Record.Field([installed_collections], [collection_name])[version]
+ otherwise null
+ )
+ in
+ AddVersion
+----
+
+=== Multi-collector aggregation example
+
+*Use case:* Count tasks by organization and status across all jobs in the last 30 days.
+
+*SQL example:*
+
+[source,sql]
+----
+SELECT
+  j.organization_id,
+  o.name AS organization_name,
+  COUNT(DISTINCT e.id) AS task_count,
+  SUM(CASE WHEN e.failed = true THEN 1 ELSE 0 END) AS failed_tasks,
+  SUM(CASE WHEN e.failed = false THEN 1 ELSE 0 END) AS successful_tasks
+FROM events_table AS e
+INNER JOIN unified_jobs_table AS j ON e.job_id = j.id
+LEFT JOIN organizations AS o ON j.organization_id = o.id
+WHERE j.created >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY j.organization_id, o.name
+ORDER BY task_count DESC;
+----
+
+IMPORTANT: Complex multi-table aggregations should be performed in your BI tool, not by requesting cross-joined data from the analytics API. The API serves raw per-collector feeds to keep response times fast and predictable.
+
+== Real-world workflow scenarios
+
+The following scenarios address common BI integration challenges and provide prescriptive guidance for handling them.
+
+=== Scenario 1: First-time full extraction (initial load)
+
+*Goal:* Load all available historical data from the analytics API into your BI tool for the first time.
+
+*Workflow:*
+
+. Trigger collection for all collectors you need:
+
+[source,sh]
+----
+curl -X POST -H "Authorization: Bearer <token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+curl -X POST -H "Authorization: Bearer <token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/collect
+----
+
+. Wait 1–2 minutes for collection to complete.
+
+. Query each collector without `since` or `until` filters to retrieve all available data:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <token>" \
+  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000"
+----
+
+. Page through results using the `next` URL in the response until `next` is null.
+
+. Store the retrieved data in your BI tool database.
+
+. Record the maximum timestamp from each collector (for example, `MAX(job_created)` from events_table) to use as the `since` parameter in future incremental refreshes.
+
+*Expected performance:* For a full 90-day retention window with \~100,000 events, expect 2.8–3.5 seconds per page of 10,000 records. A complete extraction may take several minutes depending on data volume.
+
+=== Scenario 2: Incremental refresh pattern (daily delta loads)
+
+*Goal:* Update your BI tool database with only new data since the last refresh.
+
+*Workflow:*
+
+. Retrieve the maximum timestamp from your BI tool's last successful refresh (for example, `2026-10-14T04:00:00Z`).
+
+. Trigger collection for updated collectors:
+
+[source,sh]
+----
+curl -X POST -H "Authorization: Bearer <token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+----
+
+. Wait 1–2 minutes for collection to complete.
+
+. Query with `since` filter to retrieve only new records:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <token>" \
+  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?since=2026-10-14T04:00:00Z&limit=10000"
+----
+
+. Append the new records to your BI tool database.
+
+. Update the maximum timestamp for the next incremental refresh.
+
+*Expected performance:* For a typical 24-hour delta with \~1,000 events, expect \~287ms per query. Most incremental refreshes complete in under 1 second.
+
+=== Scenario 3: Token expiry during refresh (error handling and recovery)
+
+*Goal:* Gracefully handle authentication token expiry during a long-running BI refresh.
+
+*Workflow:*
+
+. Before starting refresh, check token validity:
+
+[source,sh]
+----
+curl -I -H "Authorization: Bearer <token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/
+----
+
+. If you receive a 401 Unauthorized response, create a new token in {ControllerName}.
+
+. Update your BI tool configuration with the new token.
+
+. Retry the failed query.
+
+*Prevention:* Rotate tokens on a regular schedule (for example, every 90 days) rather than waiting for expiry. For token rotation instructions, see xref:ref-analytics-api-reference[Analytics API reference].
+
+=== Scenario 4: Retention window changes (impact on historical data)
+
+*Goal:* Understand how retention window changes affect available historical data.
+
+*Scenario:* Your analytics API retention period changes from 90 days to 30 days.
+
+*Impact:*
+
+* Data older than 30 days is purged from the analytics API.
+* Your next full extraction retrieves only 30 days of history.
+* Historical data beyond 30 days is lost unless you previously stored it in your BI tool database.
+
+*Mitigation:*
+
+* Pull analytics data frequently (daily or every few hours) and store it in your BI tool database.
+* Do not rely on the analytics API for long-term historical storage.
+* Monitor retention period changes via {ControllerName} settings.
+
+=== Scenario 5: Timezone and DST date handling
+
+*Goal:* Correctly filter data by date ranges when your BI tool and {ControllerName} are in different timezones.
+
+*Best practice:*
+
+* Always use ISO 8601 timestamps in UTC for `since` and `until` parameters:
+
+[source,sh]
+----
+?since=2026-10-01T00:00:00Z&until=2026-10-31T23:59:59Z
+----
+
+* Convert BI tool local times to UTC before constructing the API query.
+
+* Store timestamps in UTC in your BI tool database to avoid DST ambiguity.
+
+*Example:* Querying for October 2026 data in New York (EDT, UTC-4):
+
+* Local start: `2026-10-01 00:00:00 EDT` → UTC: `2026-10-01T04:00:00Z`
+* Local end: `2026-10-31 23:59:59 EDT` → UTC: `2026-11-01T03:59:59Z`
+
+Use the UTC values in the API query.
+
+== Performance expectations for common queries
+
+The following performance characteristics help you set realistic expectations for BI refresh jobs and dashboard load times.
+
+*Typical 30-day query:*
+
+* 1,000 rows: \~287ms (p50)
+* 10,000 rows: \~534ms (p50)
+
+*Full-retention query (90 days, \~100,000 events):*
+
+* Collection time: \~30 seconds
+* First readable response: \~33 seconds
+* Repeated reads of 61–65 MB: 2.8–3.5 seconds (p50)
+
+*Large dataset extraction:*
+
+* 102,762 real controller events = 61 MB response, 2.80 seconds read time (p50)
+
+NOTE: Response latency includes Gateway authentication, database lookup, JSON serialization, network transfer, and client parsing. These figures represent observed behavior, not service level agreement (SLA) guarantees.
+
+*Recommendation:* Set customer expectations that this is reporting data (not transactional). Slower response times are acceptable for large historical queries.
+
+== Role-based access control and auditor limitations
+
+The analytics API enforces role-based access control (RBAC) based on your {ControllerName} user role.
+
+=== System Administrator role
+
+* *GET permission:* Yes (read all collectors)
+* *POST permission:* Yes (trigger collection cycles)
+
+*Use case:* BI administrators who need to trigger collections on demand.
+
+=== System Auditor role
+
+* *GET permission:* Yes (read all collectors)
+* *POST permission:* No (403 Forbidden on POST to /collect)
+
+*Use case:* Read-only BI users who query analytics data but cannot modify collection schedules or trigger collections.
+
+IMPORTANT: If a System Auditor user or BI service account attempts to POST to a `/collect` endpoint, the API returns a 403 Forbidden response. Ensure your BI tool uses a System Administrator account if it needs to trigger collections, or use Pattern 2 (scheduled POST) with an admin-created recurring task.
+
+=== Organization-scoped roles
+
+*Status:* PENDING RBAC CLARIFICATION (Oct 14, 2026). Confirm whether organization-scoped users (Organization Admin, Organization Auditor) have analytics API access or if Admin/Auditor-only restriction applies.
+
+*Current assumption:* Only System Administrator and System Auditor roles have analytics API access. Organization-scoped roles do not have access.
+
+== Troubleshooting common integration errors
+
+=== Error: 403 Forbidden on POST to /collect
+
+*Cause:* Your BI tool is using a System Auditor token or an organization-scoped user token.
+
+*Solution:*
+
+. Verify the token belongs to a System Administrator account.
+. If using a System Auditor account, switch to Pattern 2 (scheduled POST) where an admin creates the recurring task.
+. If using an organization-scoped account, create a new token for a System Administrator user.
+
+=== Error: 401 Unauthorized
+
+*Cause:* Token is invalid, expired, or deleted.
+
+*Solution:*
+
+. Verify the token exists in {ControllerName} (*Access* > *Users* > *Tokens*).
+. Create a new token if the old one was deleted.
+. Update your BI tool configuration with the new token.
+
+=== Error: Empty result set despite recent job activity
+
+*Cause:* Collection has not run since the job completed, or you queried too soon after triggering collection.
+
+*Solution:*
+
+. Wait 1–2 minutes after POSTing to `/collect` before querying data.
+. Verify collection completed by querying the partition timestamp field. For instructions, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+. If timestamp is stale, manually trigger collection with POST to `/collect`.
+
+=== Error: Data older than expected is missing
+
+*Cause:* Data aged out of the retention window (default 90 days, shorter for Managed Cloud or indirect node collectors).
+
+*Solution:*
+
+. Verify the retention period in {ControllerName} settings.
+. Pull data more frequently (daily or every few hours) to avoid losing historical data.
+. Store long-term historical data in your BI tool database, not the analytics API.
+
+=== Error: Query returns 10,000 rows but more data exists
+
+*Cause:* Default pagination limit is capping results.
+
+*Solution:*
+
+. Use the `next` URL in the response to retrieve additional pages:
+
+[source,json]
+----
+{
+  "count": 102762,
+  "next": "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000&offset=10000",
+  "results": [...]
+}
+----
+
+. Iterate through pages until `next` is null.
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:proc-controller-configure-analytics[Configure {Analytics}]

@@ -1,0 +1,254 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-understand-analytics-api-data-model-and-retention"]
+
+= Understand analytics API data model and retention
+
+[role="_abstract"]
+The analytics API serves raw, non-pre-joined per-collector data feeds from {ControllerName}. Understanding the data model, retention policies, and join paths helps you build effective queries in your BI tool.
+
+
+== Raw per-collector feeds
+
+The analytics API exposes data as *raw per-collector feeds*, not pre-joined tables. Each collector endpoint returns records from a single {ControllerName} database table with no cross-table joins performed by the API.
+
+*What this means for BI integration:*
+
+* You must perform joins in your BI tool (Grafana, Power BI, Tableau) using shared key fields such as `job_id` and `organization_id`.
+* No general organization-ID query filter parameter exists at the API level. Filter by organization in your BI tool after retrieving the data.
+* Complex multi-table aggregations happen client-side, not server-side.
+
+This design keeps API response times fast and predictable. {ControllerNameStart}-side cross-joins were tested and reverted due to performance impact on time-to-first-readable-response (metrics-utility PR #611, October 2026).
+
+== Available collectors and organization fields
+
+The following collectors expose organization attribution fields that enable BI-side filtering and grouping.
+
+=== Collectors with organization fields
+
+[options="header"]
+|===
+|Collector name |Organization field |Record type
+|`controller.unified_jobs_table` |`organization_id` |Job execution records
+|`controller.main_host_daily` |`organization_id` |Daily host activity aggregates
+|`controller.main_hostmetric` |`organization_id` |Host performance metrics
+|`controller.main_indirectmanagednodeaudit` |`organization_id` |Indirect node audit records
+|`controller.events_table` |(join via `job_id` → `unified_jobs_table.id`) |Job events and task execution
+|===
+
+=== Collectors without organization fields
+
+The following collectors capture cluster-wide or non-organization-scoped data:
+
+* `controller.cluster_info` (cluster topology and configuration, no org attribution)
+* `controller.workflow_job_node_table` (workflow nodes, join to jobs for org attribution)
+
+== Join paths for BI queries
+
+Because the API serves raw feeds, you must join data in your BI tool to answer cross-collector questions. The following join patterns are copy-pasteable into SQL-based BI tools.
+
+=== Events to jobs (task execution → job metadata)
+
+*Use case:* Correlate task execution details (module used, host, success) with job metadata (organization, start time, status).
+
+*Join path:*
+
+[source,sql]
+----
+SELECT
+  e.task_name,
+  e.module,
+  e.host_id,
+  j.organization_id,
+  j.created,
+  j.status
+FROM events_table e
+JOIN unified_jobs_table j ON e.job_id = j.id
+WHERE j.organization_id = <your-org-id>
+----
+
+*Key field:* `events_table.job_id` = `unified_jobs_table.id`
+
+=== Jobs to organizations (job execution → organization attribution)
+
+*Use case:* Filter or group job execution records by organization.
+
+*Join path:*
+
+[source,sql]
+----
+SELECT
+  j.id AS job_id,
+  j.name AS job_name,
+  j.organization_id,
+  j.created,
+  j.status
+FROM unified_jobs_table j
+WHERE j.organization_id IN (<org-id-1>, <org-id-2>)
+ORDER BY j.created DESC
+----
+
+*Key field:* `unified_jobs_table.organization_id`
+
+=== Hosts to organizations (host activity → organization attribution)
+
+*Use case:* Report on host automation activity grouped by organization.
+
+*Join path:*
+
+[source,sql]
+----
+SELECT
+  h.host_id,
+  h.organization_id,
+  h.automated_counter,
+  h.last_automation
+FROM main_host_daily h
+WHERE h.organization_id = <your-org-id>
+  AND h.last_automation >= '<start-date>'
+ORDER BY h.last_automation DESC
+----
+
+*Key field:* `main_host_daily.organization_id`
+
+=== Indirect nodes to organizations (indirect node audit → organization attribution)
+
+*Use case:* Track indirect node counts and collection timestamps by organization.
+
+*Join path:*
+
+[source,sql]
+----
+SELECT
+  i.organization_id,
+  i.indirect_count,
+  i.audit_timestamp,
+  i.job_id
+FROM main_indirectmanagednodeaudit i
+WHERE i.organization_id = <your-org-id>
+  AND i.audit_timestamp >= '<start-date>'
+ORDER BY i.audit_timestamp DESC
+----
+
+*Key field:* `main_indirectmanagednodeaudit.organization_id`
+
+IMPORTANT: The `main_indirectmanagednodeaudit` collector has a shorter effective retention window than other collectors. See the Indirect node data retention section below for details.
+
+
+== Events to collection metadata (derive collection name and version)
+
+To determine which Ansible collection and version was used for each task, join event data with job data. The event's resolved_action field contains the fully qualified collection name (FQCN), and the job's installed_collections object provides version information.
+
+*Required collectors:*
+
+* controller.main_jobevent_service (provides resolved_action per event)
+* controller.unified_jobs_dashboard (provides installed_collections per job)
+
+*Join path:*
+
+Match events to jobs
+
+[source,sh]
+----
+ SELECT
+ e.cluster_id,
+ e.job_remote_id,
+ e.resolved_action,
+ j.installed_collections
+ FROM controller.main_jobevent_service AS e
+ INNER JOIN controller.unified_jobs_dashboard AS j
+ ON e.cluster_id = j.cluster_id
+ AND e.job_remote_id = j.id
+----
+
+*Derive collection name and version:*
+
+. Extract the collection name from the event's resolved_action FQCN:
+    - Example: resolved_action = "ansible.posix.mount"
+    - Collection name = first two parts = "ansible.posix"
+. Look up the version in the job's installed_collections object:
+    - Search installed_collections for the key matching the collection name
+    - Example: {"ansible.posix": {"version": "1.5.4"}}
+    - Collection version = "1.5.4"
+
+*Result:* Each event can be attributed to a specific collection name and version.
+
+IMPORTANT: Use cluster_id in the join because job IDs can overlap across different {ControllerNameStart} installations.
+
+== Data retention and rolling windows
+
+The analytics API retains data according to a rolling-window policy. Understanding retention limits helps you set appropriate BI tool refresh schedules and avoid data loss.
+
+=== Default retention period
+
+Analytics data retention follows the {ControllerName} retention period configured in controller settings. If the controller retention period is not available or not configured, the analytics API falls back to a *90-day default retention window*.
+
+*How retention works:*
+
+* Data older than the retention period is purged automatically.
+* Purging happens on a rolling basis (not at fixed calendar intervals).
+* Once purged, data is not recoverable through the API.
+
+*Recommendation:* Pull analytics data frequently (daily or more often) rather than relying on extended retention for long-term history. Store historical data in your BI tool database, not the analytics API.
+
+=== Managed Cloud retention
+
+Managed Cloud deployments may have shorter retention periods than self-managed deployments. Contact Red Hat Support to confirm the retention period for your Managed Cloud environment.
+
+=== Indirect node data retention
+
+The `controller.main_indirectmanagednodeaudit` collector has a *shorter effective retention window* than other collectors due to upstream controller table purging.
+
+*Binding constraints:*
+
+. *{ControllerNameStart} audit table purge*: 7 days (`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS = 7` in controller settings).
+. *Collection error fallback*: 3 days (`INDIRECT_HOST_QUERY_FALLBACK_GIVEUP_DAYS = 3` in controller settings).
+
+The analytics API's 90-day retention window applies only to data that was successfully collected from the controller. For indirect node audit data, anything the metrics service did not collect within 7 days of the job running never reaches the API at all, regardless of the API's retention setting.
+
+If event collection errors occur for a job, the controller abandons indirect node audit record creation after 3 days. That job's indirect node data will never appear in the analytics API.
+
+*Recommendation:* For indirect node reporting, configure your BI tool to pull data at least every 5 days to avoid gaps caused by the upstream controller purge.
+
+== No organization-level query filter
+
+The analytics API does not provide a server-side organization-level query filter parameter. You cannot pass `?organization_id=<org-id>` to the API to filter results before they are returned.
+
+*How to filter by organization:*
+
+. Retrieve the full result set from the collector endpoint (optionally filtered by time range using `since` and `until`).
+. Filter by `organization_id` in your BI tool query after the data is retrieved.
+
+This is a deliberate design choice to keep API query paths simple and performant. Client-side filtering in BI tools is fast and flexible, and avoids complex query optimization on the controller side.
+
+== Partition timestamp fields
+
+Each collector type exposes a partition timestamp field that reflects when data was last written. Use these fields to verify data freshness and determine whether a collection cycle has completed.
+
+[options="header"]
+|===
+|Collector type |Partition timestamp field |Example collector
+|Snapshot |`timestamp` |`controller.cluster_info`
+|Daily |`timestamp` |`controller.main_host_daily`
+|Hourly (CSV) |`job_created`, `job_modified` |`controller.events_table`
+|===
+
+For a step-by-step procedure to verify data currency using these fields, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+== Data does not include collection metadata
+
+The analytics API does not expose collection metadata fields such as:
+
+* `last_collected_at` (when the collector last ran)
+* `collection_status` (whether a collection cycle succeeded or failed)
+* `backfill_status` (whether gaps have been backfilled)
+
+No dedicated collection-status or backfill-status API endpoint exists. Timestamp-based verification using partition timestamp fields is the only supported method to confirm collection completion.
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
+* link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]

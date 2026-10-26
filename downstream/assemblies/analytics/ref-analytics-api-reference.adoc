@@ -1,0 +1,281 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-analytics-api-reference"]
+
+= Analytics API reference
+
+[role="_abstract"]
+The analytics API provides programmatic access to {ControllerName} analytics data through per-collector HTTP endpoints. Use this API to integrate {PlatformNameShort} analytics into external business intelligence (BI) tools such as Grafana, Power BI, Tableau, or ELK.
+
+
+== Prerequisites
+
+* {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
+* You have System Administrator or System Auditor role access to {ControllerName}.
+* Your {ControllerName} deployment is running AAP 2.7 or later.
+
+== API base URL
+
+The analytics API is available at the following base URL:
+
+[source]
+----
+https://<controller-hostname>/api/tower-analytics/v1/
+----
+
+Replace `<controller-hostname>` with your {ControllerName} hostname or IP address.
+
+== Authentication
+
+The analytics API uses token-based authentication via the {ControllerName} Gateway. No certificate-based authentication (mTLS) is required or supported.
+
+=== Creating an authentication token
+
+. From the navigation panel in {ControllerName}, select *Access* > *Users*.
+. Select your user account.
+. Select the *Tokens* tab.
+. Click *Add*.
+. Select *Read* scope for read-only access (System Auditor), or *Write* scope for triggering collections (System Administrator).
+. Click *Save*.
+. Copy the generated token. You cannot retrieve the token value after closing the dialog.
+
+=== Using the token
+
+Include the token in the `Authorization` header of every API request:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/<collector-name>/
+----
+
+=== Token rotation and revocation
+
+Tokens do not expire automatically. To rotate a token:
+
+. Create a new token following the steps above.
+. Update your BI tool configuration to use the new token.
+. Delete the old token from the *Tokens* tab.
+
+To revoke a token immediately, delete it from the *Tokens* tab. All API requests using that token will fail with a 401 Unauthorized response.
+
+== RBAC and role limitations
+
+The analytics API enforces role-based access control (RBAC) based on your {ControllerName} user role:
+
+[options="header"]
+|===
+|Role |GET (read) permission |POST (trigger collection) permission
+|System Administrator |Yes |Yes
+|System Auditor |Yes |No (403 Forbidden)
+|Organization Admin |No |No
+|Organization Auditor |No |No
+|===
+
+IMPORTANT: Only System Administrator and System Auditor roles can access the analytics API. Organization-scoped roles do not have analytics API access.
+
+System Auditor users can query analytics data but cannot trigger collection cycles. If a System Auditor attempts to POST to a collection endpoint, the API returns a 403 Forbidden response.
+
+== Per-collector endpoints
+
+The analytics API exposes one endpoint per collector. Each collector represents a distinct data table from {ControllerName}.
+
+=== Endpoint pattern
+
+[source]
+----
+GET /api/tower-analytics/v1/<collector-name>/
+POST /api/tower-analytics/v1/<collector-name>/collect
+----
+
+* *GET* retrieves collected data for the specified collector.
+* *POST* triggers a new data collection cycle (System Administrator only).
+
+=== Available collectors
+
+The following collectors are available in the analytics API. For detailed field schemas, see the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary].
+
+==== Snapshot collectors
+
+Capture point-in-time cluster state. Run at each collection window trigger.
+
+* `controller.cluster_info` (Cluster Data)
+
+==== Daily collectors
+
+Aggregate metrics over a calendar day. Run once per collection window.
+
+* `controller.main_host_daily` (host activity aggregates)
+* `controller.main_hostmetric` (host performance metrics)
+* `controller.main_indirectmanagednodeaudit` (indirect node audit records)
+
+==== Hourly collectors (CSV, high-cost)
+
+Collect large tabular data sets using 4-hour time slicing. Primary driver of collection processing time.
+
+* `controller.events_table` (job events and task execution details)
+* `controller.unified_jobs_table` (job execution records)
+* `controller.workflow_job_node_table` (workflow job nodes)
+
+For collector type scheduling details and performance characteristics, see xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance].
+
+== Query parameters
+
+=== Filtering by time range
+
+Use `since` and `until` parameters to filter results by timestamp:
+
+[source,sh]
+----
+GET /api/tower-analytics/v1/controller.unified_jobs_table/?since=2026-10-01T00:00:00Z&until=2026-10-14T23:59:59Z
+----
+
+* *since*: ISO 8601 timestamp. Returns records with timestamps at or after this value.
+* *until*: ISO 8601 timestamp. Returns records with timestamps before this value.
+* Both parameters are optional. Omitting both returns all available data within the retention window.
+
+=== Pagination
+
+The API paginates large result sets. Use `limit` and `offset` to control pagination:
+
+[source,sh]
+----
+GET /api/tower-analytics/v1/controller.events_table/?limit=1000&offset=0
+----
+
+* *limit*: Maximum number of records to return (default: 100, maximum: 10000).
+* *offset*: Number of records to skip before returning results (default: 0).
+
+The response includes `next` and `previous` URLs for navigating paginated results:
+
+[source,json]
+----
+{
+  "count": 102762,
+  "next": "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000&offset=1000",
+  "previous": null,
+  "results": [...]
+}
+----
+
+=== Sorting
+
+Use `order_by` to sort results by a field:
+
+[source,sh]
+----
+GET /api/tower-analytics/v1/controller.unified_jobs_table/?order_by=-created
+----
+
+Prefix the field name with `-` for descending order (most recent first).
+
+== Triggering data collection
+
+System Administrators can trigger an on-demand collection cycle by POSTing to a collector's `/collect` endpoint:
+
+[source,sh]
+----
+curl -X POST \
+  -H "Authorization: Bearer <your-token>" \
+  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+----
+
+=== Trigger mechanisms
+
+Analytics data collection can be triggered three ways:
+
+. *Manual POST*: Explicitly POST to `/collect` as shown above. Available to System Administrators only.
+. *Scheduled cron*: {ControllerNameStart} runs scheduled collections based on the configured collection interval (default: 4 hours). No user intervention required.
+. *Per-collector defaults*: Each collector type has a default collection frequency (hourly, daily, or snapshot). The scheduler triggers collections based on these defaults.
+
+NOTE: GET-based auto-trigger (automatic collection when querying an endpoint) is not a supported mechanism in AAP 2.7. Manual POST and scheduled cron are the only documented trigger methods.
+
+=== Collection windows and timing
+
+Collections use time windows defined by `since` and `until` parameters:
+
+* *Hourly collectors*: Default to 4-hour windows aligned to the last successful collection.
+* *Daily collectors*: Collect all data for the current calendar day.
+* *Snapshot collectors*: No time window (point-in-time capture).
+
+For collection lag and processing time details, see xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance].
+
+== Security model and data exposure
+
+The analytics API exposes a defined allowlist of {ControllerName} data. Understanding what is and is not exposed is critical for security review and compliance.
+
+=== Data included in the analytics API
+
+The following data classes are available through the analytics API:
+
+* Job execution metadata (job ID, start time, finish time, status, launch type)
+* Task execution details (task name, module used, host ID, success status)
+* Host and inventory counts (total hosts, active hosts, organization attribution)
+* Resource counts (organizations, teams, users, credentials, projects, templates)
+* Cluster topology and configuration (node count, capacity, health status)
+* Playbook and role names (no content or task details)
+* Hostnames and IP addresses (customer domain data)
+* Indirect node audit records (indirect node counts, organization attribution, collection timestamps)
+
+=== Data excluded from the analytics API
+
+The following sensitive data is *not* exposed through the analytics API:
+
+* Playbook file content
+* Task stdout or stderr output
+* Credential values (passwords, tokens, API keys, SSH keys)
+* Secret fields from custom credential types
+* Module arguments containing sensitive data
+* `extra_vars` values
+* Vault-encrypted data
+* User email addresses and personal identifiable information (where applicable)
+
+=== Shared responsibility model
+
+*Red Hat responsibility:*
+
+* Enforce RBAC at the API gateway
+* Provide token rotation and revocation mechanisms
+* Limit data exposure to the defined allowlist
+* Secure data in transit (HTTPS only)
+
+*Customer responsibility:*
+
+* Secure authentication tokens (store in secrets manager, rotate regularly)
+* Control access to BI tools that consume analytics data
+* Apply appropriate data retention policies in BI systems
+* Secure analytics data at rest in BI tool databases
+* Monitor and audit BI tool access logs
+
+IMPORTANT: Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility. The analytics API provides the data; you control how it is stored, accessed, and retained in your BI environment.
+
+== API specification
+
+The provisional OpenAPI specification for the analytics API is available in the metrics-service repository:
+
+* *Source*: link:https://github.com/ansible/metrics-service/pull/430[metrics-service PR #430]
+* *Status*: Provisional pending finalized {ControllerNameStart} API spec (target: October 2026)
+
+Use this specification as the authoritative source for endpoint paths, parameter schemas, and response formats. The specification will be finalized and published to the {ControllerNameStart} API documentation when the October {ControllerNameStart} API spec release is complete.
+
+== Deployment coverage
+
+The analytics API is available in the following {PlatformNameShort} deployment types:
+
+[options="header"]
+|===
+|Deployment type |Availability |Notes
+|Containerized (RHEL 9) |Yes |Full analytics API access
+|{OCPShort} (Operator) |Yes |Full analytics API access
+|Managed Cloud |Yes |May have shorter retention periods than self-managed deployments
+|===
+
+For Managed Cloud deployments, contact Red Hat Support to confirm the retention period for your environment.
+
+== Related links
+
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance]
+* xref:proc-controller-configure-analytics[Configure {Analytics}]
+* link:https://access.redhat.com/articles/7124201[{PlatformNameShort} - Data Dictionary]

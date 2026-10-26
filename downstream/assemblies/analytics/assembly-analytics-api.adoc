@@ -1,0 +1,42 @@
+:_mod-docs-content-type: ASSEMBLY
+
+[id="assembly-analytics-api"]
+
+= Analytics API
+
+[role="_abstract"]
+This assembly describes the architecture, configuration, collection behavior, and API used to retrieve Automation Analytics data.
+
+include::analytics/con-understand-analytics-api-architecture-and-performance.adoc[leveloffset=+1]
+
+include::analytics/con-understand-metrics-service-architecture.adoc[leveloffset=+1]
+
+include::analytics/con-automation-dashboard-deployment-options.adoc[leveloffset=+1]
+
+include::analytics/con-understand-indirect-node-counting-and-collection.adoc[leveloffset=+1]
+
+include::analytics/ref-metrics-service-deployment-requirements.adoc[leveloffset=+1]
+
+include::analytics/con-understand-analytics-api-data-model-and-retention.adoc[leveloffset=+1]
+
+include::platform/proc-controller-configure-analytics.adoc[leveloffset=+1]
+
+include::analytics/proc-connect-a-bi-tool-to-the-analytics-api.adoc[leveloffset=+1]
+
+include::analytics/ref-analytics-api-reference.adoc[leveloffset=+1]
+
+include::analytics/con-analytics-api-bi-integration-patterns.adoc[leveloffset=+1]
+
+include::analytics/proc-manage-analytics-and-data-collection-in-ansible-automation-platform.adoc[leveloffset=+1]
+
+include::analytics/proc-verify-analytics-data-freshness-using-timestamp-fields.adoc[leveloffset=+1]
+
+include::analytics/ref-analytics-api-error-handling-and-resilience.adoc[leveloffset=+1]
+
+include::platform/ref-controller-analytics-gathering.adoc[leveloffset=+1]
+
+include::platform/ref-controller-data-collection-details.adoc[leveloffset=+1]
+
+include::analytics/ref-metrics-service-configuration-variables.adoc[leveloffset=+1]
+
+include::analytics/ref-analytics-api-testathon-quick-reference.adoc[leveloffset=+1]
