@@ -8,6 +8,7 @@
 Review infrastructure requirements and prerequisites for deploying metrics service to provision appropriate resources and ensure successful deployment without capacity or compatibility issues.
 
 
+
 == Deployment prerequisites by topology
 
 Review the deployment type and configuration requirements for your topology before installing metrics service. To use the analytics API, your deployment must include both {ControllerName} and metrics service.
@@ -15,9 +16,9 @@ Review the deployment type and configuration requirements for your topology befo
 [options="header"]
 |===
 |Topology |Deployment type |Pre-configuration required |Opt-out method |Notes
-|Containerized (on-premise) |Manual |`[automationmetrics]` inventory group; database credentials in inventory |`automationmetrics_skip_install=true` in `[all:vars]` |Requires explicit deployment; administrator provisions both databases. Explicit metrics service deployment is required for analytics API access.
-|Operator on OpenShift (on-premise) |Semi-automatic |Set `metrics.disabled: false` in AnsibleAutomationPlatform CR |`metrics.disabled: true` in CR |Databases are automatically provisioned by the operator. Explicit metrics service enablement is required for analytics API access.
-|Managed cloud (Red Hat-hosted) |Pre-installed |None required |`metrics.disabled: true` in CR |Metrics service is pre-installed; no manual deployment steps required for analytics API access.
+|Containerized (on-premise) |Manual |[automationmetrics] inventory group; database credentials in inventory |automationmetrics_skip_install=true in [all:vars] |Requires explicit deployment; administrator provisions both databases. Explicit metrics service deployment is required for analytics API access.
+|Operator on OpenShift (on-premise) |Semi-automatic |Set metrics.disabled: false in AnsibleAutomationPlatform CR |metrics.disabled: true in CR |Databases are automatically provisioned by the operator. Explicit metrics service enablement is required for analytics API access.
+|Managed cloud (Red Hat-hosted) |Pre-installed |None required |metrics.disabled: true in CR |Metrics service is pre-installed; no manual deployment steps required for analytics API access.
 |===
 
 == System requirements
@@ -29,30 +30,30 @@ Review the deployment type and configuration requirements for your topology befo
 |Platform |Versions |Notes
 |*{RHEL}* |*9.2 or later* |Required for containerized installer deployment. *RHEL 8 is NOT supported.*
 |*Podman* |*4.6.0 or later* |Container runtime for metrics service
-|*PostgreSQL* |*15 or later* |For both the `metrics_service` database and the {ControllerName} database
+|*PostgreSQL* |*15 or later* |For both the metrics_service database and the {ControllerName} database
 |*{PlatformNameShort}* |*2.7.0 or later* |Metrics service is integrated with {PlatformNameShort} 2.7
 |===
 
 == Collection task schedule
 
-Metrics service runs automated collection tasks on the following schedule. All times are UTC. All scheduled tasks run on the `[automationmetrics]` node (containerized) or the `metrics-tasks` pod (operator).
+Metrics service runs automated collection tasks on the following schedule. All times are UTC. All scheduled tasks run on the [automationmetrics] node (containerized) or the metrics-tasks pod (operator).
 
 [options="header"]
 |===
 |Task Group |Task |Schedule |Description
-|METRICS_COLLECTION |`collect_hourly_metrics` |Hourly |Collects automation activity data from controller and persists analytics payloads
-|METRICS_COLLECTION |`collect_snapshot_metrics` |Daily |Collects point-in-time configuration state from controller
-|METRICS_COLLECTION |`collect_daily_metrics` |Daily |Collects aggregated daily metrics from controller
-|ANONYMIZATION |`daily_anonymize_and_prepare` |Daily at 3:00 AM UTC |Anonymizes collected data and prepares payload for Red Hat
-|SYSTEM |`cleanup_metrics_data` |Daily at 4:00 AM UTC |Purges expired data per retention policies, including analytics payloads older than the configured retention period
-|INDIRECT_NODE_COLLECTION |`daily_collect_indirect_nodes` |Daily at 1:55 AM UTC |Collects indirect node audit data from controller
+|METRICS_COLLECTION |collect_hourly_metrics |Hourly |Collects automation activity data from controller and persists analytics payloads
+|METRICS_COLLECTION |collect_snapshot_metrics |Daily |Collects point-in-time configuration state from controller
+|METRICS_COLLECTION |collect_daily_metrics |Daily |Collects aggregated daily metrics from controller
+|ANONYMIZATION |daily_anonymize_and_prepare |Daily at 3:00 AM UTC |Anonymizes collected data and prepares payload for Red Hat
+|SYSTEM |cleanup_metrics_data |Daily at 4:00 AM UTC |Purges expired data per retention policies, including analytics payloads older than the configured retention period
+|INDIRECT_NODE_COLLECTION |daily_collect_indirect_nodes |Daily at 1:55 AM UTC |Collects indirect node audit data from controller
 |===
 
 For on-demand data collection outside the scheduled windows, use the Analytics API.
 
 == Analytics API collector registry
 
-Metrics service provides an analytics API at `/api/metrics/v1/analytics/` that exposes collected data to authorized external tools. The API exposes 24 enabled collectors across three collection modes (7 hourly, 15 snapshot, and 2 daily).
+Metrics service provides an analytics API at /api/metrics/v1/analytics/ that exposes collected data to authorized external tools. The API exposes 24 enabled collectors across three collection modes (7 hourly, 15 snapshot, and 2 daily).
 
 [options="header"]
 |===
@@ -62,9 +63,9 @@ Metrics service provides an analytics API at `/api/metrics/v1/analytics/` that e
 |Daily |main_indirectmanagednodeaudit, task_executions |2
 |===
 
-The `controller.main_indirectmanagednodeaudit` collector is enabled and exposed via the analytics API at `/api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/`. Indirect node audit data is collected on a daily schedule.
+The controller.main_indirectmanagednodeaudit collector is enabled and exposed via the analytics API at /api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/. Indirect node audit data is collected on a daily schedule.
 
-Each enabled collector supports the `since` and `until` query parameters for time-bounded data retrieval where applicable.
+Each enabled collector supports the since and until query parameters for time-bounded data retrieval where applicable.
 
 For full architecture context, including the analytics data flow and the distinction between the raw analytics path and the anonymized telemetry path, see xref:con-understand-metrics-service-architecture[Understand metrics service architecture].
 
@@ -85,8 +86,8 @@ Metrics service hardware requirements are the same as gateway specifications:
 [options="header"]
 |===
 |Database |User |Privileges |Purpose
-|`metrics_service` |`metrics_service` |ALL |Metrics service own data storage, Django migrations, schema management. Stores analytics payloads in the `AnalyticsPayload` table; default retention is 90 days, configurable via `analytics_retention_days` (maximum 3,650 days). Expired payloads are purged by the daily `cleanup_metrics_data` task.
-|*awx/{ControllerName}* |`ms_awx_readonly` |GRANT SELECT ON ALL TABLES IN SCHEMA public |Read-only access to controller data for metrics collection. Required for analytics API access; metrics service cannot collect or serve analytics payloads without this connection.
+|metrics_service |metrics_service |ALL |Metrics service own data storage, Django migrations, schema management. Stores analytics payloads in the AnalyticsPayload table; default retention is 90 days, configurable via analytics_retention_days (maximum 3,650 days). Expired payloads are purged by the daily cleanup_metrics_data task.
+|*awx/{ControllerName}* |ms_awx_readonly |GRANT SELECT ON ALL TABLES IN SCHEMA public |Read-only access to controller data for metrics collection. Required for analytics API access; metrics service cannot collect or serve analytics payloads without this connection.
 |===
 
 == Related links

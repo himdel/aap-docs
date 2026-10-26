@@ -37,7 +37,7 @@ Use this pattern when your BI tool supports triggering external API calls before
 ----
 curl -X POST \
   -H "Authorization: Bearer <your-token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/collect
 ----
 
 . The analytics API triggers a collection cycle for that collector.
@@ -49,7 +49,7 @@ curl -X POST \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
 ----
 
 IMPORTANT: Wait for collection to complete before querying data. Allow at least 1–2 minutes between the POST trigger and the GET query to account for collection processing time. For expected processing times by event volume, see Understand analytics API architecture and performance.
@@ -84,7 +84,7 @@ curl -X POST \
       "collector": "controller.events_table"
     }
   }' \
-  https://<controller-hostname>/api/v2/schedules/
+  https://<gateway-hostnamecontroller-hostname>/api/v2/schedules/
 ----
 
 . The controller triggers collection on the cron schedule (for example, daily at 4:00 AM).
@@ -135,11 +135,11 @@ ORDER BY j.created DESC;
 ----
 let
   Events = Json.Document(Web.Contents(
-    "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/",
+    "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/",
     [Headers=[Authorization="Bearer <token>"]]
   )),
   Jobs = Json.Document(Web.Contents(
-    "https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/",
+    "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/",
     [Headers=[Authorization="Bearer <token>"]]
   )),
   JoinedData = Table.NestedJoin(
@@ -324,9 +324,9 @@ The following scenarios address common BI integration challenges and provide pre
 [source,sh]
 ----
 curl -X POST -H "Authorization: Bearer <token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/collect
 curl -X POST -H "Authorization: Bearer <token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/collect
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/collect
 ----
 
 . Wait 1–2 minutes for collection to complete.
@@ -336,7 +336,7 @@ curl -X POST -H "Authorization: Bearer <token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000"
 ----
 
 . Page through results using the `next` URL in the response until `next` is null.
@@ -360,7 +360,7 @@ curl -H "Authorization: Bearer <token>" \
 [source,sh]
 ----
 curl -X POST -H "Authorization: Bearer <token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/collect
 ----
 
 . Wait 1–2 minutes for collection to complete.
@@ -370,7 +370,7 @@ curl -X POST -H "Authorization: Bearer <token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?since=2026-10-14T04:00:00Z&limit=10000"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?since=2026-10-14T04:00:00Z&limit=10000"
 ----
 
 . Append the new records to your BI tool database.
@@ -390,7 +390,7 @@ curl -H "Authorization: Bearer <token>" \
 [source,sh]
 ----
 curl -I -H "Authorization: Bearer <token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/
 ----
 
 . If you receive a 401 Unauthorized response, create a new token in {ControllerName}.
@@ -546,7 +546,7 @@ IMPORTANT: If a System Auditor user or BI service account attempts to POST to a 
 ----
 {
   "count": 102762,
-  "next": "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000&offset=10000",
+  "next": "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=10000&offset=10000",
   "results": [...]
 }
 ----

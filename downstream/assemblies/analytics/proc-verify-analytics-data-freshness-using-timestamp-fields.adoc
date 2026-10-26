@@ -48,7 +48,7 @@ The analytics API exposes partition timestamp fields that reflect when data was 
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?order_by=-job_created&limit=1"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?order_by=-job_created&limit=1"
 ----
 
    For *System Data* (Daily collector), query `timestamp` in `main_host_daily`:
@@ -56,7 +56,7 @@ curl -H "Authorization: Bearer <your-token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.main_host_daily/?order_by=-timestamp&limit=1"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.main_host_daily/?order_by=-timestamp&limit=1"
 ----
 
    For *Cluster Data* (Snapshot collector), query `timestamp` in `cluster_info`:
@@ -64,10 +64,10 @@ curl -H "Authorization: Bearer <your-token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<controller-hostname>/api/tower-analytics/v1/controller.cluster_info/?order_by=-timestamp&limit=1"
+  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.cluster_info/?order_by=-timestamp&limit=1"
 ----
 
-   Replace `<your-token>` with an authentication token created in {ControllerName}, and `<controller-hostname>` with your {ControllerName} hostname. For how to create a token, see xref:ref-analytics-api-reference[Analytics API reference].
+   Replace `<your-token>` with an authentication token created in {ControllerName}, and `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname. For how to create a token, see xref:ref-analytics-api-reference[Analytics API reference].
 
 
 

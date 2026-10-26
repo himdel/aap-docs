@@ -11,15 +11,15 @@ You can connect external business intelligence (BI) tools such as Grafana, Power
 .Prerequisites
 
 * {Analytics} is enabled in {ControllerName} settings. For configuration instructions, see xref:proc-controller-configure-analytics[Configure {Analytics}].
-* You have System Administrator or System Auditor role access to {ControllerName}.
+* You have System Administrator or System Auditor role access to {PlatformNameShort}{ControllerName}.
 * Your {ControllerName} deployment is running AAP 2.7 or later.
 * You have installed and configured a BI tool that supports JSON REST API data sources (for example, Grafana 9.0 or later with the JSON API plugin).
 
 .Context
 
-The analytics API provides programmatic access to {ControllerName} data through HTTP endpoints. Unlike the Red Hat Hybrid Cloud Console {Analytics} interface, the analytics API lets you pull raw data into your own BI tool for custom dashboards, reports, and analysis.
+The analytics API provides programmatic access to {ControllerName} data through HTTP endpoints. TUnlike the Red Hat Hybrid Cloud Console {Analytics} interface, the analytics API lets you pull raw data into your own BI tool for custom dashboards, reports, and analysis.
 
-This procedure demonstrates the complete workflow from token creation through first API call using Grafana as a worked example. The same principles apply to other BI tools such as Power BI, Tableau, or Looker.
+This procedure demonstrates the complete workflow from token creation through first API call using Grafana as a worked example. Once created the token and endpoints can be used with your chosen BI tool. The same principles should apply to other BI tools such as Power BI, Tableau, or Looker.
 
 .Procedure
 
@@ -59,10 +59,10 @@ Before configuring your BI tool, verify that the analytics API is accessible and
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/
+  https://<gatwaycontroller-hostname>/api/tower-analytics/v1/
 ----
 
-   Replace `<your-token>` with the token you created in step 1, and `<controller-hostname>` with your {ControllerName} hostname or IP address.
+   Replace `<your-token>` with the token you created in step 1, and `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname or IP address.
 
 
 
@@ -73,7 +73,7 @@ curl -H "Authorization: Bearer <your-token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10
 ----
 
    This retrieves the 10 most recent job execution records.
@@ -102,7 +102,7 @@ grafana-cli plugins install yesoreyeram-infinity-datasource
 . Configure the data source:
 
    * *Name*: Ansible Analytics API
-   * *URL*: `https://<controller-hostname>/api/tower-analytics/v1/`
+   * *URL*: `https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/`
    * *Auth*: Select *Forward OAuth Identity* or *Custom HTTP Headers*.
    * *Custom HTTP Headers*:
      * Header: `Authorization`
@@ -240,7 +240,7 @@ For a complete data freshness verification procedure, see xref:proc-verify-analy
 
 === Secure your BI tool database
 
-Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility. Apply appropriate security controls:
+Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility as a customer. Apply appropriate security controls:
 
 * Enable authentication and role-based access control (RBAC) in your BI tool.
 * Encrypt BI tool database storage at rest.

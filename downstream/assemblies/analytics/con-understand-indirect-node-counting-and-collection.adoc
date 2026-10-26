@@ -8,6 +8,7 @@
 Learn how {PlatformNameShort} counts indirect nodes: what the anonymized telemetry data represents, where to access raw collector output through the analytics API, and what determines whether a device is counted.
 
 
+
 == What indirect nodes are
 
 An _indirect node_ is a device that your automation acts on but that is not a member of an {ControllerName} inventory. The platform does not know the node in the normal way: it is created and accessed outside your Ansible infrastructure, and the platform can only observe it from job events as automation runs. Network and cloud platforms are the most common example: when a playbook configures a switch, router, firewall, or cloud resource through a vendor API, that resource is an indirect node.

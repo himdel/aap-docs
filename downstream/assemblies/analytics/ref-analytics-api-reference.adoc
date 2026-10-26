@@ -20,10 +20,10 @@ The analytics API is available at the following base URL:
 
 [source]
 ----
-https://<controller-hostname>/api/tower-analytics/v1/
+https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/
 ----
 
-Replace `<controller-hostname>` with your {ControllerName} hostname or IP address.
+Replace `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname or IP address.
 
 == Authentication
 
@@ -46,7 +46,7 @@ Include the token in the `Authorization` header of every API request:
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/<collector-name>/
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/<collector-name>/
 ----
 
 === Token rotation and revocation
@@ -152,7 +152,7 @@ The response includes `next` and `previous` URLs for navigating paginated result
 ----
 {
   "count": 102762,
-  "next": "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000&offset=1000",
+  "next": "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000&offset=1000",
   "previous": null,
   "results": [...]
 }
@@ -177,7 +177,7 @@ System Administrators can trigger an on-demand collection cycle by POSTing to a 
 ----
 curl -X POST \
   -H "Authorization: Bearer <your-token>" \
-  https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/collect
 ----
 
 === Trigger mechanisms

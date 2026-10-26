@@ -172,7 +172,7 @@ def query_analytics_api_with_retry(url, token, max_retries=3):
     raise Exception(f"Failed after {max_retries} retries")
 
 # Usage
-url = "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+url = "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
 token = "<your-token>"
 data = query_analytics_api_with_retry(url, token)
 ----
@@ -227,7 +227,7 @@ function Invoke-AnalyticsAPIWithRetry {
 }
 
 # Usage
-$url = "https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+$url = "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
 $token = "<your-token>"
 $data = Invoke-AnalyticsAPIWithRetry -Url $url -Token $token
 ----
@@ -239,7 +239,7 @@ $data = Invoke-AnalyticsAPIWithRetry -Url $url -Token $token
 #!/bin/bash
 # Query analytics API with retry
 
-URL="https://<controller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+URL="https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
 TOKEN="<your-token>"
 MAX_RETRIES=3
 
