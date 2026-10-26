@@ -5,7 +5,7 @@
 = Verify analytics data freshness using timestamp fields
 
 [role="_abstract"]
-You can verify whether {Analytics} data is current by querying partition timestamp fields in the analytics API. This is the only supported method for confirming that a collection cycle has completed, because no dedicated collection-status or backfill-status endpoint exists.
+You can verify whether {Analytics} data is current by checking the discovery endpoint's last_collect value and the collection timing fields. Payload timestamp fields provide additional validation when available.
 
 
 .Prerequisites
@@ -18,73 +18,84 @@ You can verify whether {Analytics} data is current by querying partition timesta
 
 {Analytics} collection introduces a lag between job completion and data availability. This lag is the sum of the collection window wait (up to 4 hours by default) and collection processing time (typically 11–33 seconds depending on event volume). For background on collection timing, see xref:ref-controller-analytics-gathering[Analytics gathering].
 
-The analytics API exposes partition timestamp fields that reflect when data was last written. Comparing these timestamps against the expected collection window close time tells you whether the most recent cycle has completed.
+The discovery endpoint reports last_collect for each collector. Each collection record also includes started_at and finished_at. Compare these values with the expected collection window to identify stale data.
 
 .Procedure
 
-. Identify the partition timestamp field for the analytics data table you are querying.
+. Identify the collector and its collection timing metadata.
 
-   Each collector type exposes a different timestamp field:
+   Use the discovery entry's `last_collect` and the collection envelope's
+   `started_at`/`finished_at`. Payload timestamp fields are optional,
+   collector-specific validation:
 
 
 [options="header"]
 |===
-|Data table |Timestamp field |Collector type
-|Cluster Data |`timestamp` |Snapshot — records point-in-time cluster state
-|System Data |`timestamp` |Daily — records aggregated host and metric data
-|Job Events |`job_created`, `job_modified` |Hourly (CSV) — records individual job execution data
+|Data |Primary freshness signal |Collector type
+|Any API collector |Discovery `last_collect`, or envelope `finished_at` |Snapshot, daily, or hourly
+|Job event payloads |`modified` and `job_created` when payload-level validation is useful |`controller.events_table`
+|Host payloads |Collector-specific fields such as `created`, `modified`, or `last_automation` |Daily or snapshot collectors
 |===
 
 
 
-. Query the analytics API for the latest value of the relevant timestamp field in your target table.
+. Check the collector's latest collection metadata.
 
-   Use the {ControllerName} analytics API to retrieve the most recent timestamp. Sort results in descending order by the timestamp field and take the first record.
+   Use the discovery endpoint to check last_collect. You can also request the collector rows and inspect the first result, which is the newest collection record.
 
    *Examples:*
 
-   For *Job Events* (Hourly/CSV collector), query `job_created`:
+   For *Job Events*, query the newest collection envelope and inspect its
+   `finished_at`; inspect `modified` or `job_created` inside `payload` when
+   payload-level validation is needed:
 
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?order_by=-job_created&limit=1"
+  "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=1&page_size=1"
 ----
 
-   For *System Data* (Daily collector), query `timestamp` in `main_host_daily`:
+   For *System Data* (Daily collector), query the discovery entry or the
+   newest `main_host_daily` collection envelope:
 
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.main_host_daily/?order_by=-timestamp&limit=1"
+  "https://<gateway-hostname>/api/metrics/v1/analytics/controller.main_host_daily/?page=1&page_size=1"
 ----
 
-   For *Cluster Data* (Snapshot collector), query `timestamp` in `cluster_info`:
+   For *Cluster Data* (Snapshot collector), use the discovery entry and the
+   newest collection envelope. Snapshot payload fields are collector-specific;
+   the current API registry does not define a universal cluster-state payload
+   or common `timestamp` field:
 
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.cluster_info/?order_by=-timestamp&limit=1"
+  "https://<gateway-hostname>/api/metrics/v1/analytics/<snapshot-collector>/?page=1&page_size=1"
 ----
 
-   Replace `<your-token>` with an authentication token created in {ControllerName}, and `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname. For how to create a token, see xref:ref-analytics-api-reference[Analytics API reference].
+   Replace `<your-token>` with an authentication token created in {ControllerName}, and `<gateway-hostname>` with your {ControllerName} hostname. For how to create a token, see xref:ref-analytics-api-reference[Analytics API reference].
 
 
 
-. Compare the returned timestamp against the expected collection window close time.
+. Compare the returned collection timing metadata against the expected window close time.
 
-   The expected collection window close time is the scheduled collection trigger time plus the processing time for your event volume. For the default 4-hour window, the window closes at multiples of 4 hours from the last successful collection.
+   The expected collection close time depends on the collector mode and its
+   configured schedule. Compare `finished_at`/`last_collect` with that expected
+   close time; do not infer freshness from a fixed payload field shared by all
+   collectors.
 
    For processing time estimates by event volume, see xref:ref-controller-analytics-gathering[Analytics gathering].
 
-. Evaluate the timestamp comparison result and take the appropriate action.
+. Evaluate the collection timing comparison and take the appropriate action.
 
-   * If the timestamp is at or after the expected window close time, the collection cycle completed successfully and data is current.
-   * If the timestamp predates the expected window close time, the collection cycle has not yet completed. Wait for the current collection window to finish, or trigger collection manually.
+   * If `finished_at` or `last_collect` is at or after the expected window close time, the collection cycle completed successfully and data is current.
+   * If the collection timing predates the expected window close time, the collection cycle has not yet completed. Wait for the current collection window to finish, or trigger collection manually.
 
 .Result
 
-The timestamp comparison tells you whether the most recent collection cycle has completed. If data is current, the returned timestamp is at or after the expected collection window close time. If data is stale, use the recovery steps in the post-requisite section.
+The collection timing comparison tells you whether the most recent collection cycle has completed. If data is current, `finished_at` or `last_collect` is at or after the expected collection window close time. If data is stale, use the recovery steps in the post-requisite section.
 
 .Post-requisites
 

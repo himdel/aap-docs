@@ -59,10 +59,10 @@ Before configuring your BI tool, verify that the analytics API is accessible and
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<gatwaycontroller-hostname>/api/tower-analytics/v1/
+  https://<gateway-hostname>/api/metrics/v1/analytics/
 ----
 
-   Replace `<your-token>` with the token you created in step 1, and `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname or IP address.
+   Replace `<your-token>` with the token you created in step 1, and `<gateway-hostname>` with your {ControllerName} hostname or IP address.
 
 
 
@@ -73,10 +73,12 @@ curl -H "Authorization: Bearer <your-token>" \
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.unified_jobs_table/?limit=10
+  https://<gateway-hostname>/api/metrics/v1/analytics/controller.unified_jobs_dashboard/?page=1&page_size=10
 ----
 
-   This retrieves the 10 most recent job execution records.
+   This retrieves up to 10 collection envelopes. The job execution records
+   are nested in each envelope's `payload`; `page_size` does not count records
+   inside a payload.
 
 === 3. Configure Grafana to connect to the analytics API
 
@@ -102,7 +104,7 @@ grafana-cli plugins install yesoreyeram-infinity-datasource
 . Configure the data source:
 
    * *Name*: Ansible Analytics API
-   * *URL*: `https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/`
+   * *URL*: `https://<gateway-hostname>/api/metrics/v1/analytics/`
    * *Auth*: Select *Forward OAuth Identity* or *Custom HTTP Headers*.
    * *Custom HTTP Headers*:
      * Header: `Authorization`
@@ -124,13 +126,15 @@ grafana-cli plugins install yesoreyeram-infinity-datasource
    * *Type*: Select *JSON*.
    * *Parser*: Select *Backend*.
    * *Method*: Select *GET*.
-   * *URL*: `controller.unified_jobs_table/?limit=100&order_by=-created`
+   * *URL*: `controller.unified_jobs_dashboard/?page=1&page_size=100`
 
 
 
-. In the *Rows / Root selector* field, enter `results` (the JSON path to the array of records).
+. In the *Rows / Root selector* field, select `results` and then flatten
+   each result's `payload` array. The API response is a page of collection
+   envelopes, not a flat page of job records.
 
-. In the *Columns* section, define the fields to display:
+. In the *Columns* section, define fields from the flattened `payload` records:
 
    * `id` (job ID)
    * `name` (job name)
@@ -154,12 +158,13 @@ To filter data by organization, use Grafana's filter or transformation features 
 
 . Configure the query to retrieve job data:
 
-   * *URL*: `controller.unified_jobs_table/?limit=1000&order_by=-created`
+   * *URL*: `controller.unified_jobs_dashboard/?page=1&page_size=100`
    * *Rows / Root selector*: `results`
 
 
 
-. In the *Transform* tab, add a *Filter by value* transformation:
+. Flatten each envelope's `payload`, then in the *Transform* tab, add a
+   *Filter by value* transformation:
 
    * *Field*: `organization_id`
    * *Match*: Select your organization ID(s).
@@ -172,13 +177,13 @@ NOTE: The analytics API does not provide a server-side `?organization_id=<id>` f
 
 === 6. Create a panel with joined event and job data
 
-To correlate task execution details with job metadata, join two API calls in Grafana.
+To correlate task execution data with job metadata, combine the relevant collector results in Grafana.
 
 . Add a new panel.
 
 . Add the first query to retrieve events:
 
-   * *URL*: `controller.events_table/?limit=1000&order_by=-job_created`
+   * *URL*: `controller.events_table/?page=1&page_size=100`
    * *Rows / Root selector*: `results`
    * *Alias*: `events`
 
@@ -186,23 +191,24 @@ To correlate task execution details with job metadata, join two API calls in Gra
 
 . Add a second query to retrieve jobs:
 
-   * *URL*: `controller.unified_jobs_table/?limit=1000&order_by=-created`
+   * *URL*: `controller.unified_jobs_dashboard/?page=1&page_size=100`
    * *Rows / Root selector*: `results`
    * *Alias*: `jobs`
 
 
 
-. In the *Transform* tab, add a *Join by field* transformation:
+. Flatten the `payload` array in both query results. In the *Transform* tab,
+   add a *Join by field* transformation:
 
-   * *Join on*: `events.job_id` = `jobs.id`
+    * *Join on*: `cluster_id` plus `events.job_id` = `jobs.id`
    * *Mode*: *Inner join*
 
 
 
 . Select the fields to display from both datasets:
 
-   * From `events`: `task_name`, `module`, `host_id`
-   * From `jobs`: `organization_id`, `status`, `created`
+   * From flattened `events`: `task`, `task_action`, `resolved_action`, and other fields returned by the collector
+   * From flattened `jobs`: `organization_id`, `status`, `created`
 
 
 
@@ -218,7 +224,9 @@ Your BI tool is now connected to the analytics API and can query {ControllerName
 
 Configure your BI tool to refresh data on a schedule that aligns with the analytics collection window:
 
-. Determine the analytics collection interval (default: 4 hours). For how to locate this setting, see xref:ref-controller-analytics-gathering[Analytics gathering].
+. Determine the upstream {Analytics} collection interval (default:
+   4 hours). The analytics API also has per-collector hourly, daily, and
+   snapshot schedules. For details, see xref:ref-controller-analytics-gathering[Analytics gathering].
 
 . Schedule BI tool refresh to run at least *1–2 minutes after the collection window closes* to allow collection processing to complete.
 
@@ -230,11 +238,11 @@ For collection timing and processing time details, see xref:ref-controller-analy
 
 === Monitor for stale data
 
-Verify that analytics data is current by querying partition timestamp fields:
+Verify that analytics data is current by checking collection timing metadata:
 
-* For job events: Query `job_created` or `job_modified` in `controller.events_table` and verify that the most recent timestamp is within the expected collection lag.
-* For daily collectors: Query `timestamp` in `controller.main_host_daily`.
-* For snapshot collectors: Query `timestamp` in `controller.cluster_info`.
+* For job events: Validate the envelope's `finished_at`; payload timestamps include `modified` and `job_created` in `controller.events_table`.
+* For daily collectors: Validate the envelope's `finished_at`; payload fields are collector-specific (for example, `created`, `modified`, or `last_automation`).
+* For snapshot collectors: Use the discovery entry's `last_collect` and the envelope's `finished_at`; snapshot payload fields are collector-specific.
 
 For a complete data freshness verification procedure, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
 

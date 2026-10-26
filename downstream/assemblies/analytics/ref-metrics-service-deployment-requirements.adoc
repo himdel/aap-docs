@@ -53,21 +53,7 @@ For on-demand data collection outside the scheduled windows, use the Analytics A
 
 == Analytics API collector registry
 
-Metrics service provides an analytics API at /api/metrics/v1/analytics/ that exposes collected data to authorized external tools. The API exposes 24 enabled collectors across three collection modes (7 hourly, 15 snapshot, and 2 daily).
-
-[options="header"]
-|===
-|Collection mode |Examples |Count
-|Hourly |job_host_summary, unified_jobs, credentials, main_jobevent_service |7
-|Snapshot (daily) |execution_environments, config, controller_version, table_metadata, feature_flags |15
-|Daily |main_indirectmanagednodeaudit, task_executions |2
-|===
-
-The controller.main_indirectmanagednodeaudit collector is enabled and exposed via the analytics API at /api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/. Indirect node audit data is collected on a daily schedule.
-
-Each enabled collector supports the since and until query parameters for time-bounded data retrieval where applicable.
-
-For full architecture context, including the analytics data flow and the distinction between the raw analytics path and the anonymized telemetry path, see xref:con-understand-metrics-service-architecture[Understand metrics service architecture].
+The analytics API discovery endpoint is the authoritative collector registry. It reports enabled collectors, modes, supported time windows, data shapes, and collection URLs. For API usage, see xref:ref-analytics-api-reference[Analytics API reference].
 
 == Hardware requirements
 
@@ -78,7 +64,7 @@ Metrics service hardware requirements are the same as gateway specifications:
 |Component |Minimum |Recommended |Notes
 |*CPU* |*2 vCPUs* |*4 vCPUs* |Dedicated to metrics service container
 |*RAM* |*4 GB* |*8 GB* |For metrics processing and database operations
-|*Storage (database)* |*20 GB* |*40 GB+ (SSD preferred)* |For metrics_service database; grows based on data retention. Analytics payloads are retained for 90 days by default.
+|*Storage (database)* |*20 GB* |*40 GB+ (SSD preferred)* |For metrics_service database; grows based on data volume and configured retention.
 |===
 
 == Database requirements
@@ -86,7 +72,7 @@ Metrics service hardware requirements are the same as gateway specifications:
 [options="header"]
 |===
 |Database |User |Privileges |Purpose
-|metrics_service |metrics_service |ALL |Metrics service own data storage, Django migrations, schema management. Stores analytics payloads in the AnalyticsPayload table; default retention is 90 days, configurable via analytics_retention_days (maximum 3,650 days). Expired payloads are purged by the daily cleanup_metrics_data task.
+|metrics_service |metrics_service |ALL |Metrics service own data storage, Django migrations, schema management. Stores analytics payloads in the AnalyticsPayload table; retention follows the {ControllerNameStart} cleanup_jobs schedule, with a 90-day fallback when no valid schedule is available. An explicit analytics_retention_days task argument can override it. Expired payloads are purged by cleanup_metrics_data.
 |*awx/{ControllerName}* |ms_awx_readonly |GRANT SELECT ON ALL TABLES IN SCHEMA public |Read-only access to controller data for metrics collection. Required for analytics API access; metrics service cannot collect or serve analytics payloads without this connection.
 |===
 

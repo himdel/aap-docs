@@ -36,15 +36,24 @@ For field-level schema definitions of each file in the tar archive, see the link
 
 === Snapshot collectors
 
-Capture point-in-time data representing current state, such as cluster configuration and topology. Snapshot collectors run at each collection window trigger. The partition key for snapshot data is `Cluster Data.timestamp`.
+Capture point-in-time data representing current state, such as configuration
+and topology. Snapshot collectors run at each collection window trigger. Use
+the discovery `last_collect` and collection-envelope timing fields to verify
+API freshness.
 
 === Daily collectors
 
-Collect metrics that aggregate over a calendar day. Examples include `main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. The partition key for daily collector data is `System Data.timestamp`.
+Collect metrics that aggregate over a calendar day. Examples include
+`main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. Use
+the collection envelope's `finished_at` to verify API freshness; payload fields
+are collector-specific.
 
 === Hourly collectors (CSV, high-cost)
 
-Collect large tabular data sets including `events_table`, `unified_jobs_table`, and `workflow_job_node_table`. Despite the "hourly" classification name, these collectors use 4-hour time slicing (`four_hour_slicing`) to bound the volume of data processed in any single collection window. The "hourly" label refers to the collector run frequency; data slicing uses a 4-hour window, so the effective data refresh interval matches the collection window, not one hour. Because of their size, high-cost CSV collectors are the primary driver of collection processing time at large event volumes.
+Collect large tabular data sets including `events_table`,
+`unified_jobs_dashboard`, and `workflow_job_node_table` using the hourly
+collection window. Because of their size, these collectors are the primary
+driver of collection processing time at large event volumes.
 
 For the collection lag formula and how system load affects processing time, see xref:ref-controller-analytics-gathering[Analytics gathering].
 
@@ -66,14 +75,17 @@ For the complete lag formula (collection window wait + processing time), see xre
 
 == Timestamp fields for data currency verification
 
-Each collector type exposes a partition timestamp field in the analytics API. You can query these fields to determine whether data for a given collection window is available. No dedicated collection metadata field (such as `last_collected_at`) exists in the public analytics API.
+The analytics API exposes collection timing metadata in the discovery response
+and collection envelopes. Use `last_collect`, `started_at`, and `finished_at`
+to validate collection freshness; payload timestamp fields are
+collector-specific, and there is no separate `last_collected_at` field.
 
 [options="header"]
 |===
-|Data table |Timestamp field |Collector type
-|Cluster Data |`timestamp` |Snapshot
-|System Data |`timestamp` |Daily
-|Job Events |`job_created`, `job_modified` |Hourly (CSV)
+|Data |Primary freshness signal |Collector type
+|Any API collector |Discovery `last_collect`, or envelope `finished_at` |Snapshot, daily, or hourly
+|Job event payloads |`modified`, `job_created` |`controller.events_table`
+|Other payloads |Collector-specific fields |Daily and snapshot collectors
 |===
 
 For a step-by-step procedure to verify data currency using these fields, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
@@ -88,7 +100,9 @@ A missed collection cycle creates a gap in analytics data for that window's time
 
 === No collection-status or backfill-status endpoint
 
-No public API endpoint exposes collection run status or backfill state. Timestamp-based verification (see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]) is the only supported method to confirm collection cycle completion.
+No public API endpoint exposes collection run status or backfill state. Use
+the discovery and collection-envelope timing metadata (see Verify analytics
+data freshness using timestamp fields) to confirm collection cycle completion.
 
 === Recovery
 

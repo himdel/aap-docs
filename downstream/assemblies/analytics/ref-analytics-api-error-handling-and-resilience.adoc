@@ -23,7 +23,7 @@ The analytics API returns standard HTTP status codes to indicate success or fail
 |===
 |Status code |Meaning |Response body
 |200 OK |Request succeeded |JSON object with results array and pagination metadata
-|201 Created |Collection triggered successfully (POST to /collect) |JSON object with collection job details
+|202 Accepted |Collection queued (POST to /collect/) |JSON object with task_id and task_url
 |===
 
 === Client error codes (4xx)
@@ -33,7 +33,7 @@ The analytics API returns standard HTTP status codes to indicate success or fail
 |Status code |Meaning |Common causes |Resolution
 |400 Bad Request |Malformed request syntax |Invalid query parameter format, malformed JSON in POST body |Validate query parameters and JSON syntax before sending
 |401 Unauthorized |Authentication failed |Missing or invalid token, expired token, deleted token |Verify token exists in {ControllerName} and regenerate if necessary
-|403 Forbidden |Insufficient permissions |System Auditor attempting POST to /collect, organization-scoped user accessing analytics API |Use System Administrator token for POST operations, verify role permissions
+|403 Forbidden |Insufficient permissions |System Auditor attempting POST to /collect/, organization-scoped user accessing analytics API |Use System Administrator token for POST operations, verify role permissions
 |404 Not Found |Endpoint does not exist |Incorrect collector name, typo in URL path |Verify collector name against available collectors list
 |429 Too Many Requests |Rate limit exceeded (if implemented) |Excessive requests in short time window |Implement exponential backoff and retry with Retry-After header value
 |===
@@ -64,12 +64,7 @@ or
 [source,json]
 ----
 {
-  "error": "Invalid collector name 'controller.invalid_table'",
-  "available_collectors": [
-    "controller.events_table",
-    "controller.unified_jobs_table",
-    "controller.main_host_daily"
-  ]
+  "detail": "Unknown or disabled collector: controller.invalid_table"
 }
 ----
 
@@ -172,7 +167,7 @@ def query_analytics_api_with_retry(url, token, max_retries=3):
     raise Exception(f"Failed after {max_retries} retries")
 
 # Usage
-url = "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+url = "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=1&page_size=100"
 token = "<your-token>"
 data = query_analytics_api_with_retry(url, token)
 ----
@@ -227,7 +222,7 @@ function Invoke-AnalyticsAPIWithRetry {
 }
 
 # Usage
-$url = "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+$url = "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=1&page_size=100"
 $token = "<your-token>"
 $data = Invoke-AnalyticsAPIWithRetry -Url $url -Token $token
 ----
@@ -239,7 +234,7 @@ $data = Invoke-AnalyticsAPIWithRetry -Url $url -Token $token
 #!/bin/bash
 # Query analytics API with retry
 
-URL="https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000"
+URL="https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=1&page_size=100"
 TOKEN="<your-token>"
 MAX_RETRIES=3
 
@@ -292,7 +287,7 @@ When the analytics service is under heavy load, response times increase and the 
 
 . *Fall back to cached data:* If a refresh fails due to 503 Service Unavailable, display the last successfully retrieved dataset in your BI dashboard rather than showing an error to end users.
 
-. *Reduce query scope:* If full-retention queries (90 days) time out, reduce the time range to 30 or 7 days and try again.
+. *Reduce query scope:* If full-retention queries time out, reduce the time range to 30 or 7 days and try again.
 
 . *Schedule refreshes sequentially:* Avoid triggering multiple concurrent BI refresh jobs against the same analytics API endpoint. Space refresh jobs 5–10 minutes apart.
 

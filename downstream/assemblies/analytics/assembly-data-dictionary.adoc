@@ -10,7 +10,7 @@
 
 == Overview
 
-The data dictionary outlines the information collected by {Analytics} from the {PlatformName} {ControllerName}, also known as Automation Execution. The linked KB article documents field-level schema definitions for all collected data tables, but does not include collection metadata fields (such as a `last_collected_at` field) because no such metadata field exists in the public analytics API.
+The data dictionary outlines the information collected by {Analytics} from the {PlatformName} {ControllerName}, also known as Automation Execution. The linked KB article documents field-level schema definitions for all collected data tables. It does not include a dedicated `last_collected_at` field; collection timing is available through the analytics API discovery response and collection records.
 
 == Data currency verification
 

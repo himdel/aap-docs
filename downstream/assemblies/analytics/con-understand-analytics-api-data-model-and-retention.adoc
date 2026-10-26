@@ -5,18 +5,16 @@
 = Understand analytics API data model and retention
 
 [role="_abstract"]
-The analytics API serves raw, non-pre-joined per-collector data feeds from {ControllerName}. Understanding the data model, retention policies, and join paths helps you build effective queries in your BI tool.
+The analytics API serves separate, non-pre-joined per-collector data feeds from {ControllerName}. Understanding the data model, retention policies, and join paths helps you build effective queries in your BI tool.
 
 
-== Raw per-collector feeds
+== Per-collector feeds
 
-The analytics API exposes data as *raw per-collector feeds*, not pre-joined tables. Each collector endpoint returns records from a single {ControllerName} database table with no cross-table joins performed by the API.
+The analytics API exposes per-collector feeds, not pre-joined tables. Each collector returns collection results for one data source; the API does not join data across collectors.
 
-*What this means for BI integration:*
-
-* You must perform joins in your BI tool (Grafana, Power BI, Tableau) using shared key fields such as `job_id` and `organization_id`.
-* No general organization-ID query filter parameter exists at the API level. Filter by organization in your BI tool after retrieving the data.
-* Complex multi-table aggregations happen client-side, not server-side.
+* You must perform joins in your BI tool using fields returned by the relevant collectors.
+* No general organization filter is available in the API. Filter by organization in your BI tool after retrieving the data.
+* Complex multi-table joins and aggregations happen in your BI tool, not in the API.
 
 This design keeps API response times fast and predictable. {ControllerNameStart}-side cross-joins were tested and reverted due to performance impact on time-to-first-readable-response (metrics-utility PR #611, October 2026).
 
@@ -29,111 +27,23 @@ The following collectors expose organization attribution fields that enable BI-s
 [options="header"]
 |===
 |Collector name |Organization field |Record type
-|`controller.unified_jobs_table` |`organization_id` |Job execution records
-|`controller.main_host_daily` |`organization_id` |Daily host activity aggregates
-|`controller.main_hostmetric` |`organization_id` |Host performance metrics
-|`controller.main_indirectmanagednodeaudit` |`organization_id` |Indirect node audit records
-|`controller.events_table` |(join via `job_id` → `unified_jobs_table.id`) |Job events and task execution
+|`controller.unified_jobs_dashboard` |`organization_id` |Job execution records
+|`controller.main_host_daily` |`organization_remote_id` |Daily host activity aggregates
+|`controller.main_hostmetric` |no organization field |Host performance metrics
+|`controller.main_indirectmanagednodeaudit` |`organization_remote_id` |Indirect node audit records
+|`controller.events_table` |collector-specific event/job fields |Job events and task execution
 |===
 
 === Collectors without organization fields
 
 The following collectors capture cluster-wide or non-organization-scoped data:
 
-* `controller.cluster_info` (cluster topology and configuration, no org attribution)
+* Use the discovery response to identify available snapshot collectors.
 * `controller.workflow_job_node_table` (workflow nodes, join to jobs for org attribution)
 
-== Join paths for BI queries
+== Using data from multiple collectors
 
-Because the API serves raw feeds, you must join data in your BI tool to answer cross-collector questions. The following join patterns are copy-pasteable into SQL-based BI tools.
-
-=== Events to jobs (task execution → job metadata)
-
-*Use case:* Correlate task execution details (module used, host, success) with job metadata (organization, start time, status).
-
-*Join path:*
-
-[source,sql]
-----
-SELECT
-  e.task_name,
-  e.module,
-  e.host_id,
-  j.organization_id,
-  j.created,
-  j.status
-FROM events_table e
-JOIN unified_jobs_table j ON e.job_id = j.id
-WHERE j.organization_id = <your-org-id>
-----
-
-*Key field:* `events_table.job_id` = `unified_jobs_table.id`
-
-=== Jobs to organizations (job execution → organization attribution)
-
-*Use case:* Filter or group job execution records by organization.
-
-*Join path:*
-
-[source,sql]
-----
-SELECT
-  j.id AS job_id,
-  j.name AS job_name,
-  j.organization_id,
-  j.created,
-  j.status
-FROM unified_jobs_table j
-WHERE j.organization_id IN (<org-id-1>, <org-id-2>)
-ORDER BY j.created DESC
-----
-
-*Key field:* `unified_jobs_table.organization_id`
-
-=== Hosts to organizations (host activity → organization attribution)
-
-*Use case:* Report on host automation activity grouped by organization.
-
-*Join path:*
-
-[source,sql]
-----
-SELECT
-  h.host_id,
-  h.organization_id,
-  h.automated_counter,
-  h.last_automation
-FROM main_host_daily h
-WHERE h.organization_id = <your-org-id>
-  AND h.last_automation >= '<start-date>'
-ORDER BY h.last_automation DESC
-----
-
-*Key field:* `main_host_daily.organization_id`
-
-=== Indirect nodes to organizations (indirect node audit → organization attribution)
-
-*Use case:* Track indirect node counts and collection timestamps by organization.
-
-*Join path:*
-
-[source,sql]
-----
-SELECT
-  i.organization_id,
-  i.indirect_count,
-  i.audit_timestamp,
-  i.job_id
-FROM main_indirectmanagednodeaudit i
-WHERE i.organization_id = <your-org-id>
-  AND i.audit_timestamp >= '<start-date>'
-ORDER BY i.audit_timestamp DESC
-----
-
-*Key field:* `main_indirectmanagednodeaudit.organization_id`
-
-IMPORTANT: The `main_indirectmanagednodeaudit` collector has a shorter effective retention window than other collectors. See the Indirect node data retention section below for details.
-
+The API does not join data from different collectors. Retrieve each collector's data, inspect the fields returned for that collector, and perform any joins or aggregations in your BI tool. Use the discovery response and the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary] to confirm available fields and join keys.
 
 == Events to collection metadata (derive collection name and version)
 
@@ -181,7 +91,7 @@ The analytics API retains data according to a rolling-window policy. Understandi
 
 === Default retention period
 
-Analytics data retention follows the {ControllerName} retention period configured in controller settings. If the controller retention period is not available or not configured, the analytics API falls back to a *90-day default retention window*.
+For scheduled cleanup, metrics service resolves retention from enabled {ControllerNameStart} cleanup_jobs schedules. The lowest valid positive days value wins. If {ControllerNameStart} is unreachable or no valid schedule exists, retention falls back to 90 days. The analytics_retention_days task argument is an explicit override, not the normal scheduled default.
 
 *How retention works:*
 
@@ -204,7 +114,7 @@ The `controller.main_indirectmanagednodeaudit` collector has a *shorter effectiv
 . *{ControllerNameStart} audit table purge*: 7 days (`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS = 7` in controller settings).
 . *Collection error fallback*: 3 days (`INDIRECT_HOST_QUERY_FALLBACK_GIVEUP_DAYS = 3` in controller settings).
 
-The analytics API's 90-day retention window applies only to data that was successfully collected from the controller. For indirect node audit data, anything the metrics service did not collect within 7 days of the job running never reaches the API at all, regardless of the API's retention setting.
+The API retention period applies only to data that was successfully collected from the controller. For indirect node audit data, anything the metrics service did not collect within 7 days of the job running never reaches the API at all, regardless of the configured retention period.
 
 If event collection errors occur for a job, the controller abandons indirect node audit record creation after 3 days. That job's indirect node data will never appear in the analytics API.
 
@@ -221,29 +131,24 @@ The analytics API does not provide a server-side organization-level query filter
 
 This is a deliberate design choice to keep API query paths simple and performant. Client-side filtering in BI tools is fast and flexible, and avoids complex query optimization on the controller side.
 
-== Partition timestamp fields
+== Collection timing and payload timestamps
 
-Each collector type exposes a partition timestamp field that reflects when data was last written. Use these fields to verify data freshness and determine whether a collection cycle has completed.
+Collection envelopes expose authoritative timing metadata for every collector.
+Use the discovery entry's `last_collect` and each envelope's `started_at` and
+`finished_at` to verify that a collection cycle has completed. Payload fields
+are collector-specific and are additional validation only.
 
 [options="header"]
 |===
-|Collector type |Partition timestamp field |Example collector
-|Snapshot |`timestamp` |`controller.cluster_info`
-|Daily |`timestamp` |`controller.main_host_daily`
-|Hourly (CSV) |`job_created`, `job_modified` |`controller.events_table`
+|Collector type |Payload-level fields, when useful |Example collector
+|Snapshot |Collector-specific; no universal timestamp field |Any snapshot collector returned by discovery
+|Daily |`created`, `modified`, or `last_automation`, depending on the collector |`controller.main_host_daily`
+|Hourly |`modified` and `job_created` |`controller.events_table`
 |===
 
 For a step-by-step procedure to verify data currency using these fields, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
 
-== Data does not include collection metadata
-
-The analytics API does not expose collection metadata fields such as:
-
-* `last_collected_at` (when the collector last ran)
-* `collection_status` (whether a collection cycle succeeded or failed)
-* `backfill_status` (whether gaps have been backfilled)
-
-No dedicated collection-status or backfill-status API endpoint exists. Timestamp-based verification using partition timestamp fields is the only supported method to confirm collection completion.
+== Related links
 
 == Related links
 

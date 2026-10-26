@@ -157,30 +157,24 @@ IMPORTANT: The analytics API serves raw, pre-rollup collector output (not the sa
 |===
 |Operation |Endpoint |Method |Description
 |Discovery |`/api/metrics/v1/analytics/` |GET |Returns the list of available collectors and their metadata.
-|Data retrieval |`/api/metrics/v1/analytics/<collector>/` |GET |Returns paginated rows of collected data for the specified collector. Supports `since` and `until` query parameters.
-|On-demand collection |`/api/metrics/v1/analytics/<collector>/collect/` |POST |Triggers an immediate collection run for the specified collector. Returns HTTP 202 Accepted.
+|Data retrieval |`/api/metrics/v1/analytics/<collector>/` |GET |Returns paginated collection results for the specified collector. Supports `since` and `until` query parameters.
+|On-demand collection |`/api/metrics/v1/analytics/<collector>/collect/` |POST |Triggers a collection task for the specified collector. Returns HTTP 202 Accepted with a task_id and task_url.
 |===
 
 === Collectors
 
-The analytics API exposes 24 enabled collectors across three collection modes:
-
-* *Hourly collectors (7):* Collect automation activity data every hour, including job host summaries, unified jobs, credentials, and job event data.
-* *Snapshot collectors (15):* Collect point-in-time configuration data daily, including execution environments, system configuration, controller version, table metadata, and feature flags.
-* *Daily collectors (2):* Collect aggregated daily metrics, including indirect node audit data (`controller.main_indirectmanagednodeaudit`) and pipeline task execution data.
-
-The `controller.main_indirectmanagednodeaudit` collector is enabled unconditionally and exposes indirect node audit records at `/api/metrics/v1/analytics/controller.main_indirectmanagednodeaudit/`.
+Use the discovery endpoint for the current collector list, what each collector returns, its collection mode, whether it supports time windows, and its collection URLs.
 
 === Collection scheduling
 
 Metrics service supports two collection modes:
 
-* *On-demand collection:* Triggered by sending a POST request to `/api/metrics/v1/analytics/<collector>/collect/`. On-demand collection runs immediately for the specified collector only, outside the scheduled window. The endpoint returns HTTP 202 Accepted.
+* *On-demand collection:* Triggered by sending a POST request to `/api/metrics/v1/analytics/<collector>/collect/`. On-demand collection queues a task for the specified collector only, outside the scheduled window. The endpoint returns HTTP 202 Accepted with a task_id and task_url.
 * *Recurring scheduled collection:* Three mode-specific functions run on the scheduler: `collect_hourly_metrics` (hourly), `collect_daily_metrics` (daily), and `collect_snapshot_metrics` (daily). For task scheduling configuration and management procedures, see your {PlatformNameShort} task scheduling documentation.
 
 === Payload retention
 
-Analytics payloads are retained for 90 days by default in the metrics service database (`AnalyticsPayload` table). You can configure the retention period using the `analytics_retention_days` parameter (maximum 3,650 days). Data older than the configured retention period is purged automatically by the daily `cleanup_metrics_data` task. For deployment requirements including storage sizing guidance, see xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements].
+Analytics payload retention is resolved by the scheduled cleanup task from the {ControllerNameStart} `cleanup_jobs` schedule, with a 90-day fallback when {ControllerNameStart} is unreachable or no valid schedule exists. The `analytics_retention_days` task argument can override this for an explicit task run. Data older than the resolved retention period is purged by `cleanup_metrics_data`. For storage guidance, see xref:ref-metrics-service-deployment-requirements[Metrics service deployment requirements].
 
 === Cluster identification
 

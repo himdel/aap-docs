@@ -20,10 +20,10 @@ The analytics API is available at the following base URL:
 
 [source]
 ----
-https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/
+https://<gateway-hostname>/api/metrics/v1/analytics/
 ----
 
-Replace `<gateway-hostnamecontroller-hostname>` with your {ControllerName} hostname or IP address.
+Replace `<gateway-hostname>` with your {ControllerName} hostname or IP address.
 
 == Authentication
 
@@ -46,7 +46,7 @@ Include the token in the `Authorization` header of every API request:
 [source,sh]
 ----
 curl -H "Authorization: Bearer <your-token>" \
-  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/<collector-name>/
+  https://<gateway-hostname>/api/metrics/v1/analytics/<collector-name>/
 ----
 
 === Token rotation and revocation
@@ -84,8 +84,8 @@ The analytics API exposes one endpoint per collector. Each collector represents 
 
 [source]
 ----
-GET /api/tower-analytics/v1/<collector-name>/
-POST /api/tower-analytics/v1/<collector-name>/collect
+GET /api/metrics/v1/analytics/<collector-name>/
+POST /api/metrics/v1/analytics/<collector-name>/collect/
 ----
 
 * *GET* retrieves collected data for the specified collector.
@@ -93,110 +93,86 @@ POST /api/tower-analytics/v1/<collector-name>/collect
 
 === Available collectors
 
-The following collectors are available in the analytics API. For detailed field schemas, see the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary].
+The discovery endpoint is the authoritative source for enabled collectors in this deployment. It returns each collector's name, description, data shape, mode, window support, last_collect, and the URLs for reading and triggering collection.
 
-==== Snapshot collectors
-
-Capture point-in-time cluster state. Run at each collection window trigger.
-
-* `controller.cluster_info` (Cluster Data)
-
-==== Daily collectors
-
-Aggregate metrics over a calendar day. Run once per collection window.
-
-* `controller.main_host_daily` (host activity aggregates)
-* `controller.main_hostmetric` (host performance metrics)
-* `controller.main_indirectmanagednodeaudit` (indirect node audit records)
-
-==== Hourly collectors (CSV, high-cost)
-
-Collect large tabular data sets using 4-hour time slicing. Primary driver of collection processing time.
-
-* `controller.events_table` (job events and task execution details)
-* `controller.unified_jobs_table` (job execution records)
-* `controller.workflow_job_node_table` (workflow job nodes)
-
-For collector type scheduling details and performance characteristics, see xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance].
+The current AAP 2.7 registry contains 28 enabled collectors: 10 hourly, 15 snapshot, and 3 daily. For detailed field schemas, see the xref:assembly-using-data-dictionary[{Analytics} Data Dictionary].
 
 == Query parameters
 
-=== Filtering by time range
+=== Filtering by collection window
 
-Use `since` and `until` parameters to filter results by timestamp:
+Use since and until to filter collection windows that overlap the requested interval:
 
 [source,sh]
 ----
-GET /api/tower-analytics/v1/controller.unified_jobs_table/?since=2026-10-01T00:00:00Z&until=2026-10-14T23:59:59Z
+GET /api/metrics/v1/analytics/controller.unified_jobs_dashboard/?since=2026-10-01T00:00:00Z&until=2026-10-14T23:59:59Z
 ----
 
-* *since*: ISO 8601 timestamp. Returns records with timestamps at or after this value.
-* *until*: ISO 8601 timestamp. Returns records with timestamps before this value.
-* Both parameters are optional. Omitting both returns all available data within the retention window.
+* *since*: Inclusive lower bound for the collection window.
+* *until*: Exclusive upper bound for the collection window.
+* These parameters filter collection windows, not individual records inside their payloads. Omitting both returns all stored data within the retention window.
 
 === Pagination
 
-The API paginates large result sets. Use `limit` and `offset` to control pagination:
+The API paginates collections. Use page and page_size. The count value counts collections, not records inside their payloads:
 
 [source,sh]
 ----
-GET /api/tower-analytics/v1/controller.events_table/?limit=1000&offset=0
+GET /api/metrics/v1/analytics/controller.events_table/?page=1&page_size=100
 ----
 
-* *limit*: Maximum number of records to return (default: 100, maximum: 10000).
-* *offset*: Number of records to skip before returning results (default: 0).
+* *page*: Page number within the result set.
+* *page_size*: Number of collections to return per page.
 
-The response includes `next` and `previous` URLs for navigating paginated results:
+The response includes next and previous URLs for navigating paginated collections. Each result includes the collector, collection window, collection timing, and its data.
 
 [source,json]
 ----
 {
-  "count": 102762,
-  "next": "https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/?limit=1000&offset=1000",
+  "count": 2,
+  "next": "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=2&page_size=100",
   "previous": null,
-  "results": [...]
+  "results": [{"id": 123, "collector": "controller.events_table", "started_at": "...", "finished_at": "...", "payload": [...]}]
 }
 ----
 
-=== Sorting
+=== Collection metadata
 
-Use `order_by` to sort results by a field:
-
-[source,sh]
-----
-GET /api/tower-analytics/v1/controller.unified_jobs_table/?order_by=-created
-----
-
-Prefix the field name with `-` for descending order (most recent first).
+The discovery endpoint reports last_collect for each collector. Each collection record includes started_at and finished_at. A POST to /collect/ returns task_id and task_url. The API does not provide a separate collection-status or backfill-status endpoint.
 
 == Triggering data collection
 
-System Administrators can trigger an on-demand collection cycle by POSTing to a collector's `/collect` endpoint:
+System Administrators can queue an on-demand collection task by POSTing to a collector's `/collect/` endpoint. Each request returns HTTP 202 Accepted with a task_id and task_url:
 
 [source,sh]
 ----
 curl -X POST \
   -H "Authorization: Bearer <your-token>" \
-  https://<gateway-hostnamecontroller-hostname>/api/tower-analytics/v1/controller.events_table/collect
+  https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/collect/
 ----
 
 === Trigger mechanisms
 
 Analytics data collection can be triggered three ways:
 
-. *Manual POST*: Explicitly POST to `/collect` as shown above. Available to System Administrators only.
-. *Scheduled cron*: {ControllerNameStart} runs scheduled collections based on the configured collection interval (default: 4 hours). No user intervention required.
+. *Manual POST*: Explicitly POST to `/collect/` as shown above. Available to System Administrators only.
+. *Scheduled service tasks*: Metrics service runs collection tasks according to the configured hourly, daily, and snapshot schedules. No user intervention is required.
 . *Per-collector defaults*: Each collector type has a default collection frequency (hourly, daily, or snapshot). The scheduler triggers collections based on these defaults.
 
 NOTE: GET-based auto-trigger (automatic collection when querying an endpoint) is not a supported mechanism in AAP 2.7. Manual POST and scheduled cron are the only documented trigger methods.
 
 === Collection windows and timing
 
-Collections use time windows defined by `since` and `until` parameters:
+When `since` and `until` are omitted from an on-demand POST, the API applies
+mode-specific defaults:
 
-* *Hourly collectors*: Default to 4-hour windows aligned to the last successful collection.
-* *Daily collectors*: Collect all data for the current calendar day.
+* *Hourly collectors*: The previous complete hour.
+* *Daily collectors*: The previous complete day.
 * *Snapshot collectors*: No time window (point-in-time capture).
+
+These defaults apply to the queued API task; they do not backfill the full
+retention period. To request a different window, include explicit `since` and
+`until` values in the POST body.
 
 For collection lag and processing time details, see xref:con-understand-analytics-api-architecture-and-performance[Understand analytics API architecture and performance].
 
@@ -209,7 +185,7 @@ The analytics API exposes a defined allowlist of {ControllerName} data. Understa
 The following data classes are available through the analytics API:
 
 * Job execution metadata (job ID, start time, finish time, status, launch type)
-* Task execution details (task name, module used, host ID, success status)
+* Task execution details, including task and action fields, host information, and success status
 * Host and inventory counts (total hosts, active hosts, organization attribution)
 * Resource counts (organizations, teams, users, credentials, projects, templates)
 * Cluster topology and configuration (node count, capacity, health status)

@@ -51,15 +51,23 @@ The collection interval defaults to 4 hours. You can verify or adjust this inter
 
 === Snapshot collectors
 
-Capture point-in-time data (for example, cluster configuration and topology). Partition key: `Cluster Data.timestamp`.
+Capture point-in-time data (for example, configuration and topology). Use the
+analytics API discovery `last_collect` and collection-envelope timing fields
+to verify freshness; payload fields are collector-specific.
 
 === Daily collectors
 
-Collect metrics that aggregate over a day (for example, `main_host_daily`, `main_hostmetric`, `main_indirectmanagednodeaudit`). Partition key: `System Data.timestamp`.
+Collect metrics that aggregate over a day (for example, `main_host_daily`,
+`main_hostmetric`, and `main_indirectmanagednodeaudit`). Use the collection
+envelope's `finished_at` for API freshness; payload fields are
+collector-specific.
 
 === Hourly collectors (CSV, high-cost)
 
-Collect large tabular data sets (for example, `events_table`, `unified_jobs_table`, `workflow_job_node_table`) using 4-hour time slicing (`four_hour_slicing`). Despite the "hourly" classification name, the "hourly" label refers to the collector run frequency; data slicing uses a 4-hour window, so the effective data refresh interval matches the collection window, not one hour. These collectors are the primary driver of collection processing time at high event volumes.
+Collect large tabular data sets (for example, `events_table`,
+`unified_jobs_dashboard`, and `workflow_job_node_table`) using the hourly
+collection window. These collectors are the primary driver of collection
+processing time at high event volumes.
 
 For per-collector-type scheduling detail and timestamp field documentation, see xref:ref-controller-data-collection-details[Details about data collected for {Analytics}].
 
