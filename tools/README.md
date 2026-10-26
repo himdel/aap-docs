@@ -4,10 +4,13 @@
 `analytics` title. It uses the bundle's top-level ToC to decide which topics
 belong in the generated API assembly, while retaining unlisted source topics
 as reusable generated files. It applies the repository's modular document headers,
-AsciiDoc attributes, IDs, cross-references, and title/assembly includes. The
-four Markdown topics that already have AAP counterparts are updated in place:
+AsciiDoc attributes, IDs, cross-references, and title/assembly includes.
+The Markdown topics with AAP counterparts are converted into managed files.
+The pre-existing legacy `assembly-data-dictionary.adoc` is preserved, while
+the metrics-service dictionary is generated as a separate assembly. The
+generated topics currently include:
 
-- `assembly-data-dictionary.adoc`
+- `assembly-metrics-service-data-dictionary.adoc`
 - `proc-controller-configure-analytics.adoc`
 - `ref-controller-analytics-gathering.adoc`
 - `ref-controller-data-collection-details.adoc`

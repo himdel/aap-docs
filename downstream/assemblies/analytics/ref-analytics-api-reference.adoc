@@ -145,7 +145,7 @@ The remaining enabled collectors can be collected on demand or added to a custom
 
 Some host collectors also depend on database helper functions being available in the metrics-service deployment. The discovery response is authoritative for the collectors available in a particular deployment.
 
-For detailed field schemas, see xref:assembly-using-data-dictionary[{Analytics} Data Dictionary], the deployed OpenAPI schema, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+For detailed field schemas, see xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary], the deployed OpenAPI schema, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
 
 === Understanding payload shape metadata
 
@@ -372,4 +372,4 @@ For Managed Cloud deployments, contact Red Hat Support to confirm the retention 
 * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
 * xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
 * Understand analytics API architecture and performance
-* xref:assembly-using-data-dictionary[{Analytics} Data Dictionary]
+* xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary]

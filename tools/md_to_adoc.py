@@ -377,8 +377,6 @@ def render_master(config: dict, active_ids: set[str]) -> str:
     lines = [":_mod-docs-content-type: ASSEMBLY", ":imagesdir: images", ":numbered:", ":toclevels: 1", "", ":experimental:", "", "include::attributes/attributes.adoc[]", "", f"= {title['book_title']}", "", '[role="_abstract"]', title["abstract"], "", "include::{Boilerplate}[]", ""]
     if title.get("static_includes_before_api", True):
         for include in title["static_includes"]:
-            if include == "analytics/assembly-data-dictionary.adoc" and "assembly-using-data-dictionary" not in active_ids:
-                continue
             lines.append(f"include::{include}[leveloffset=+1]")
             lines.append("")
     lines.append(f"include::analytics/{Path(title['assembly']).name}[leveloffset=+1]")
@@ -442,7 +440,7 @@ def convert(source: Path, repo: Path, config: dict, dry_run: bool) -> int:
     generated[ensure_platform_link(repo, dry_run)] = ""
 
     manifest_path = repo / config["managed_manifest"]
-    keep = set(generated)
+    keep = set(generated) | set(config.get("preserved_files", []))
     unlink_managed(repo, manifest_path, keep, dry_run)
     for relative, content in generated.items():
         if relative == "downstream/titles/analytics/platform":

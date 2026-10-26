@@ -1,5 +1,8 @@
 {
   "managed_manifest": "tools/md_to_adoc.manifest.json",
+  "preserved_files": [
+    "downstream/assemblies/analytics/assembly-data-dictionary.adoc"
+  ],
   "title": {
     "master": "downstream/titles/analytics/master.adoc",
     "assembly": "downstream/assemblies/analytics/assembly-analytics-api.adoc",
@@ -10,7 +13,8 @@
       "analytics/assembly-automation-savings-planner.adoc",
       "analytics/assembly-insights-reports.adoc",
       "analytics/assembly-using-job-explorer.adoc",
-      "analytics/assembly-data-dictionary.adoc"
+      "analytics/assembly-data-dictionary.adoc",
+      "analytics/assembly-metrics-service-data-dictionary.adoc"
     ],
     "static_includes_before_api": true
   },
@@ -45,8 +49,8 @@
     "metrics-service-deployment-requirements": {"type": "REFERENCE"},
     "automation-analytics-data-dictionary": {
       "type": "ASSEMBLY",
-      "target": "downstream/assemblies/analytics/assembly-data-dictionary.adoc",
-      "id": "assembly-using-data-dictionary",
+      "target": "downstream/assemblies/analytics/assembly-metrics-service-data-dictionary.adoc",
+      "id": "assembly-metrics-service-data-dictionary",
       "omit_from_api_assembly": true
     },
     "understand-analytics-api-data-model-and-retention": {"type": "CONCEPT"},
@@ -90,7 +94,8 @@
     "Automation dashboard deployment options": "con-automation-dashboard-deployment-options",
     "Understand indirect node counting and collection": "con-understand-indirect-node-counting-and-collection",
     "Metrics service deployment requirements": "ref-metrics-service-deployment-requirements",
-    "Automation Analytics Data Dictionary": "assembly-using-data-dictionary",
+    "Automation Analytics Data Dictionary": "assembly-metrics-service-data-dictionary",
+    "Metrics-service Analytics API Data Dictionary": "assembly-metrics-service-data-dictionary",
     "Understand analytics API data model and retention": "con-understand-analytics-api-data-model-and-retention",
     "Configure Automation Analytics": "proc-controller-configure-analytics",
     "Connect a BI tool to the analytics API": "proc-connect-a-bi-tool-to-the-analytics-api",
