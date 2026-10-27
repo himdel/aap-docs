@@ -2,47 +2,108 @@
 
 [id="ref-controller-data-collection-details"]
 
-= Details of data collection
+= Details about data collected for {Analytics}
 
 [role="_abstract"]
-Learn about the specific data that {ControllerName} collects and sends to Red Hat when you enable {Analytics}.
+Metrics service exposes raw automation-controller data through enabled per-collector analytics API endpoints. This topic summarizes the data classes and collector modes; use Analytics API reference and the API data model for the authoritative endpoint and field contracts.
 
-{Analytics} collects the following classes of data from {ControllerName}:
+
+== Data collected
+
+The enabled analytics collectors expose the following classes of data from
+{ControllerName}:
 
 * Basic configuration, such as which features are enabled, and what operating system is being used
 * Topology and status of the {ControllerName} environment and hosts, including capacity and health
 * Counts of automation resources:
-
-** organizations, teams, and users
-** inventories and hosts
-** credentials (indexed by type)
-** projects (indexed by type)
-** templates
-** schedules
-** active sessions
-** running and pending jobs
+  * organizations, teams, and users
+  * inventories and hosts
+  * credentials (indexed by type)
+  * projects (indexed by type)
+  * templates
+  * schedules
+  * active sessions
+  * running and pending jobs
 * Job execution details (start time, finish time, launch type, and success)
 * Automation task details (success, host id, playbook/role, task name, and module used)
+* Host automation history, including first and most recent automation timestamps where the collector provides them
 
-You can use `awx-manage gather_analytics` (without `--ship`) to inspect the data that {ControllerName} sends, so that you can satisfy your data collection concerns. 
-This creates a .tar file that contains the analytics data that is sent to Red Hat.
+For field-level API schemas, use the discovery response, the metrics-service
+API specification, and xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary].
 
-This file contains several JSON and CSV files. 
-Each file contains a different set of analytics data.
+== Collector types and scheduling
 
-* xref:ref-controller-manifest-json[manifest.json]
-* xref:ref-controller-config-json[config.json]
-* xref:ref-controller-instance-info-json[instance_info.json]
-* xref:ref-controller-counts-json[counts.json]
-* xref:ref-controller-org-counts-json[org_counts.json]
-* xref:ref-controller-cred-type-counts-json[cred_type_counts.json]
-* xref:ref-controller-inventory-counts-json[inventory_counts.json]
-* xref:ref-controller-projects-scm-type-json[projects_by_scm_type.json]
-* xref:ref-controller-query-info-json[query_info.json]
-* xref:ref-controller-job-counts-json[job_counts.json]
-* xref:ref-controller-job-instance-counts-json[job_instance_counts.json]
-* xref:ref-controller-unified-job-template-table-csv[unified_job_template_table.csv]
-* xref:ref-controller-unified-jobs-table-csv[unified_jobs_table.csv]
-* xref:ref-controller-workflow-job-template-node-table-csv[workflow_job_template_node_table.csv]
-* xref:ref-controller-workflow-job-node-table-csv[workflow_job_node_table.csv]
-* xref:ref-controller-events-table-csv[events_table.csv]
+Metrics-service analytics uses three collector modes. The mode determines the
+scheduled cadence and the default window used for on-demand collection.
+
+=== Snapshot collectors
+
+Capture point-in-time data representing current state, such as configuration
+and topology. Snapshot collectors do not use a time window.
+
+=== Daily collectors
+
+Collect metrics that aggregate over a calendar day. Examples include
+`main_host_daily`, `main_hostmetric`, and `main_indirectmanagednodeaudit`. An
+on-demand request without explicit bounds uses the previous complete day.
+
+=== Hourly collectors
+
+Collect large tabular data sets including `events_table`,
+`unified_jobs_dashboard`, and `workflow_job_node_table`. An on-demand request
+without explicit bounds uses the previous complete hour.
+
+== Collection processing and task timing
+
+On-demand collection is asynchronous: the API returns `202 Accepted` with a
+task URL, and the payload becomes available after the task completes. Response
+and task timing depends on the collector, payload size, database, and system
+load; the API does not define a processing-time SLA. See Analytics API
+reference and xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience].
+
+== Freshness reference
+
+For API freshness, use the discovery and collection-envelope timing metadata
+described in xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]. This topic
+focuses on the data classes and collection behavior, not on repeating the API
+freshness procedure.
+
+== Collection failure and delay behavior
+
+If an analytics collection task fails or is delayed, no successful collection
+envelope is created for that task. Understanding this behavior helps you
+interpret gaps in API data.
+
+=== Data gap semantics
+
+A failed scheduled task can leave a gap in stored collection envelopes. A later
+collection does not rewrite earlier successful envelopes. On-demand requests for
+the same resolved window reuse an existing task, while successful collections are
+still stored as collection envelopes rather than updated in place. Use an explicit
+window when a targeted retry is needed, and track collection IDs or windows in the
+BI system.
+
+=== No collection-status or backfill-status endpoint
+
+No public API endpoint exposes collection run status or backfill state. Use the
+task status and collection-envelope timing metadata (see Verify analytics data
+freshness using timestamp fields) to confirm collection completion.
+
+=== Recovery
+
+For API recovery and freshness verification, see xref:ref-analytics-api-reference[Analytics API reference] and
+xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience].
+
+== BI refresh scheduling guidance
+
+Use the collector mode and collection timing metadata described in Analytics
+API reference and xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience]

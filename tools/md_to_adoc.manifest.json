@@ -1,0 +1,20 @@
+{
+  "files": [
+    "downstream/assemblies/analytics/assembly-analytics-api.adoc",
+    "downstream/assemblies/analytics/assembly-data-dictionary.adoc",
+    "downstream/assemblies/analytics/assembly-metrics-service-data-dictionary.adoc",
+    "downstream/assemblies/analytics/con-analytics-api-bi-integration-patterns.adoc",
+    "downstream/assemblies/analytics/con-understand-analytics-api-data-model-and-retention.adoc",
+    "downstream/assemblies/analytics/con-understand-metrics-service-architecture.adoc",
+    "downstream/assemblies/analytics/proc-connect-a-bi-tool-to-the-analytics-api.adoc",
+    "downstream/assemblies/analytics/proc-manage-analytics-and-data-collection-in-ansible-automation-platform.adoc",
+    "downstream/assemblies/analytics/proc-verify-analytics-data-freshness-using-timestamp-fields.adoc",
+    "downstream/assemblies/analytics/ref-analytics-api-error-handling-and-resilience.adoc",
+    "downstream/assemblies/analytics/ref-analytics-api-reference.adoc",
+    "downstream/modules/platform/proc-controller-configure-analytics.adoc",
+    "downstream/modules/platform/ref-controller-analytics-gathering.adoc",
+    "downstream/modules/platform/ref-controller-data-collection-details.adoc",
+    "downstream/titles/analytics/master.adoc",
+    "downstream/titles/analytics/platform"
+  ]
+}

@@ -2,28 +2,52 @@
 
 [id="proc-controller-configure-analytics"]
 
-= Configuring {Analytics}
+= Configure {Analytics}
 
 [role="_abstract"]
-When you imported your license for the first time, you were automatically opted in for the collection of data that powers {Analytics}, a cloud service that is part of the {PlatformNameShort} subscription.
+{PlatformNameShort} automatically authenticates analytics transmission using your platform subscription certificate. You can optionally configure a service account if you prefer explicit credential management instead of certificate-based authentication.
+
 
 .Prerequisites
 
-* A service account created with the *Automation Analytics Viewer* role in console.redhat.com.
-For more information, see link:https://docs.redhat.com/en/documentation/red_hat_hybrid_cloud_console/1-latest/html/creating_and_managing_service_accounts/proc-ciam-svc-acct-overview-creating-service-acct#proc-ciam-svc-acct-create-creating-service-acct[Creating a service account].
+* A service account created with the *{Analytics} Viewer* role in console.redhat.com. For more information, see Create a service account in {OCPShort} or Kubernetes.
+
+.Context
+
+Use this procedure if you want to configure a service account for analytics instead of using automatic certificate-based authentication.
 
 .Procedure
 
-. From the navigation panel, select {MenuSetSystem}.
-. Click btn:[Edit].
-. In the field labeled *Red Hat Client ID for Analytics*, enter the client ID you received when you created your service account to retrieve subscription and content information.
-. In the field labeled *Red Hat Client Secret for Analytics*, enter the client secret you received when you created your service account to send data to {Analytics}.
-. In the *Options* list select the checkbox to *Gather data for Automation Analytics*.
-. Click btn:[Save].
+. From the navigation panel, select *Settings* > *Automation Execution* > *System*.
 
-.Verification
+. Click *Edit*.
 
-After configuring the service account, run a test job to ensure everything is set up correctly.
+. Choose the authentication method for analytics transmission:
 
-. From the navigation panel, select menu:{MenuTopAE}[Jobs] to launch a job.
+   * If you are using automatic certificate-based authentication (the default), skip steps 3 and 4 and proceed directly to step 5 to enable data collection.
+   * If you prefer to configure explicit service account credentials instead of certificate-based authentication, continue with steps 3 and 4.
+
+
+
+. (Optional) In the field labeled *Red Hat Client ID for Analytics*, enter the client ID you received when you created your service account to retrieve subscription and content information.
+
+. (Optional) In the field labeled *Red Hat Client Secret for Analytics*, enter the client secret you received when you created your service account to send data to {Analytics}.
+
+. In the *Options* list select the checkbox to *Gather data for {Analytics}*.
+
+. Click *Save*.
+
+.Result
+
+Analytics data collection is enabled. If you configured a service account, verify the configuration by running a test job.
+
+.Post-requisites
+
+If you configured a service account, verify that analytics data is being transmitted:
+
+. From the navigation panel, select *Automation Execution* > *Jobs* to launch a job.
 . Check link:https://console.redhat.com/ansible/automation-analytics/reports[analytics at console.redhat.com] to confirm that the data is being posted.
+
+To avoid querying incomplete data, align your BI tool refresh schedule with the analytics collection window. For timing details and the refresh offset formula, see xref:ref-controller-data-collection-details[Details about data collected for {Analytics}].
+
+For collection window timing details and processing time figures, see xref:ref-controller-analytics-gathering[Analytics gathering].

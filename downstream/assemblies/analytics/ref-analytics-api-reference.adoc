@@ -1,0 +1,375 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-analytics-api-reference"]
+
+= Analytics API reference
+
+[role="_abstract"]
+The analytics API provides programmatic access to {ControllerName} analytics data through per-collector HTTP endpoints. Use this API to integrate {PlatformNameShort} analytics into external business intelligence (BI) or reporting tools.
+
+
+== Prerequisites
+
+* You have System Administrator or System Auditor role access to {ControllerName}.
+* Your {ControllerName} deployment is running AAP 2.7 or later.
+
+== API base URL
+
+The analytics API is available at the following base URL:
+
+[source]
+----
+https://<gateway-hostname>/api/metrics/v1/analytics/
+----
+
+Replace `<gateway-hostname>` with your {ControllerName} hostname or IP address.
+
+== Authentication
+
+The analytics API uses token-based authentication via the {ControllerName} Gateway. No certificate-based authentication (mTLS) is required or supported.
+
+=== Creating an authentication token
+
+. From the navigation panel in {ControllerName}, select *Access* > *Users*.
+. Select your user account.
+. Select the *Tokens* tab.
+. Click *Add*.
+. Select *Read* scope for read-only access (System Auditor), or *Write* scope for triggering collections (System Administrator).
+. Click *Save*.
+. Copy the generated token. You cannot retrieve the token value after closing the dialog.
+
+=== Using the token
+
+Include the token in the `Authorization` header of every API request:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<gateway-hostname>/api/metrics/v1/analytics/<collector-name>/
+----
+
+=== Token rotation and revocation
+
+Tokens do not expire automatically. To rotate a token:
+
+. Create a new token following the steps above.
+. Update your BI tool configuration to use the new token.
+. Delete the old token from the *Tokens* tab.
+
+To revoke a token immediately, delete it from the *Tokens* tab. All API requests using that token will fail with a 401 Unauthorized response.
+
+== RBAC and role limitations
+
+The analytics API enforces role-based access control (RBAC) based on your {ControllerName} user role:
+
+[options="header"]
+|===
+|Role |GET (read) permission |POST (trigger collection) permission
+|System Administrator |Yes |Yes
+|System Auditor |Yes |No (403 Forbidden)
+|Organization Admin |No |No
+|Organization Auditor |No |No
+|===
+
+IMPORTANT: Only System Administrator and System Auditor roles can access the analytics API. Organization-scoped roles do not have analytics API access.
+
+System Auditor users can query analytics data but cannot trigger collection cycles. If a System Auditor attempts to POST to a collection endpoint, the API returns a 403 Forbidden response.
+
+== Per-collector endpoints
+
+The analytics API exposes one endpoint per collector. Each collector represents a distinct data table from {ControllerName}.
+
+=== Endpoint pattern
+
+[source]
+----
+GET /api/metrics/v1/analytics/<collector-name>/
+POST /api/metrics/v1/analytics/<collector-name>/collect/
+----
+
+* *GET* retrieves collected data for the specified collector.
+* *POST* triggers a new data collection cycle (System Administrator only).
+
+=== Available collectors
+
+The discovery endpoint is the authoritative source for enabled collectors in this deployment. It returns each collector's name, description, data shape, mode, window support, last_collect, and the URLs for reading and triggering collection.
+
+The current AAP 2.7 registry contains 33 enabled collectors: 12 hourly, 18 snapshot, and 3 daily. The API registry's `enabled` flag only makes a collector available; it does not enable collection by itself. No collector is collected automatically unless a built-in metrics-service task or another configured task uses it. See link:#scheduling-additional-collectors[Scheduling additional collectors] to configure recurring collection.
+
+The following collectors are collected automatically by the default metrics-service schedules:
+
+[options="header"]
+|===
+|Mode |Public collector |`collector_type`
+|Hourly |`controller.unified_jobs_dashboard` |`unified_jobs`
+|Hourly |`controller.job_host_summary_service` |`job_host_summary_service`
+|Hourly |`controller.credentials_service` |`credentials_service`
+|Hourly |`controller.main_jobevent_service` |`main_jobevent_service`
+|Snapshot |`controller.execution_environments` |`execution_environments`
+|Snapshot |`controller.config` |`config`
+|Snapshot |`controller.controller_version_service` |`controller_version_service`
+|Snapshot |`controller.table_metadata` |`table_metadata`
+|Snapshot |`controller.feature_flags_service` |`feature_flags_service`
+|Daily |`controller.main_indirectmanagednodeaudit` |`indirect_managed_nodes`
+|===
+
+The remaining enabled collectors can be collected on demand or added to a customer-created recurring task. Their task mappings are:
+
+[options="header"]
+|===
+|Mode |Public collector |`collector_type`
+|Hourly |`controller.unified_jobs` |`unified_jobs_base`
+|Hourly |`controller.unified_jobs_org` |`unified_jobs_org`
+|Hourly |`controller.job_host_summary` |`job_host_summary`
+|Hourly |`controller.credentials_service_org` |`credentials_service_org`
+|Hourly |`controller.main_jobevent` |`main_jobevent_legacy`
+|Hourly |`controller.events_table` |`events_table`
+|Hourly |`controller.workflow_job_node_table` |`workflow_job_node_table`
+|Hourly |`controller.query_info` |`query_info`
+|Snapshot |`controller.counts` |`counts`
+|Snapshot |`controller.cred_type_counts` |`cred_type_counts`
+|Snapshot |`controller.cred_type_counts_org` |`cred_type_counts_org`
+|Snapshot |`controller.host_metric_summary_monthly_table` |`host_metric_summary_monthly_table`
+|Snapshot |`controller.instance_info` |`instance_info`
+|Snapshot |`controller.inventory_counts` |`inventory_counts`
+|Snapshot |`controller.inventory_counts_org` |`inventory_counts_org`
+|Snapshot |`controller.org_counts` |`org_counts`
+|Snapshot |`controller.projects_by_scm_type` |`projects_by_scm_type`
+|Snapshot |`controller.projects_by_scm_type_org` |`projects_by_scm_type_org`
+|Snapshot |`controller.unified_job_template_table` |`unified_job_template_table`
+|Snapshot |`controller.workflow_job_template_node_table` |`workflow_job_template_node_table`
+|Snapshot |`controller.main_host` |`main_host`
+|Daily |`controller.main_host_daily` |`main_host_daily`
+|Daily |`controller.main_hostmetric` |`main_hostmetric`
+|===
+
+Some host collectors also depend on database helper functions being available in the metrics-service deployment. The discovery response is authoritative for the collectors available in a particular deployment.
+
+For detailed field schemas, see xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary], the deployed OpenAPI schema, and xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention].
+
+=== Understanding payload shape metadata
+
+The discovery response includes `payload_shape` and `key_field` to help clients interpret the nested `payload`:
+
+* `payload_shape: array` means that records are the items in the payload array.
+* `payload_shape: object` with a null `key_field` means that the object has fixed, collector-defined properties.
+* `payload_shape: object` with a `key_field` means that the top-level object keys identify records, and the record values contain the fields described by that key.
+
+Use these values instead of assuming that every collector returns a flat list of records.
+
+== Query parameters
+
+=== Filtering by collection window
+
+Use since and until to filter collection windows that overlap the requested interval:
+
+[source,sh]
+----
+GET /api/metrics/v1/analytics/controller.unified_jobs_dashboard/?since=2026-10-01T00:00:00Z&until=2026-10-14T23:59:59Z
+----
+
+* *since*: Inclusive lower bound for the collection window.
+* *until*: Exclusive upper bound for the collection window.
+* These parameters filter collection windows, not individual records inside their payloads. Omitting both returns all stored data within the retention window.
+
+=== Pagination
+
+The API paginates collections. Use page and page_size. The count value counts collections, not records inside their payloads:
+
+[source,sh]
+----
+GET /api/metrics/v1/analytics/controller.events_table/?page=1&page_size=100
+----
+
+* *page*: Page number within the result set.
+* *page_size*: Number of collections to return per page.
+
+The response includes next and previous URLs for navigating paginated collections. Each result includes the collector, collection window, collection timing, and its data.
+
+[source,json]
+----
+{
+  "count": 2,
+  "next": "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=2&page_size=100",
+  "previous": null,
+  "results": [{"id": 123, "collector": "controller.events_table", "started_at": "...", "finished_at": "...", "payload": [...]}]
+}
+----
+
+=== Collection metadata
+
+The discovery endpoint reports last_collect for each collector. Each collection record includes started_at and finished_at. A POST to /collect/ returns task_id and task_url. The API does not provide a separate collection-status or backfill-status endpoint.
+
+== Triggering data collection
+
+Authorized users can queue an on-demand collection task by POSTing to a collector's `/collect/` endpoint. The request is asynchronous and returns a task_id and task_url:
+
+[source,sh]
+----
+curl -X POST \
+  -H "Authorization: Bearer <your-token>" \
+  https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/collect/
+----
+
+The trigger is idempotent for the resolved collector and collection window. Repeating a request for the same window reuses the existing task instead of queueing duplicate work. The response uses these statuses and dispositions:
+
+[options="header"]
+|===
+|Status |`disposition` |Meaning
+|`202` |`created` |A new collection task was queued.
+|`200` |`reused` |An existing pending, running, or completed task covers the window.
+|`202` |`requeued` |A failed or stale task was placed back in the queue.
+|`409` |not applicable |A different window for the same collector is already running. The response identifies the task that is in progress.
+|===
+
+=== Trigger mechanisms
+
+Analytics data collection can be triggered three ways:
+
+. *Manual POST*: Explicitly POST to `/collect/` as shown above. Available to System Administrators only.
+. *Scheduled service tasks*: Metrics service runs collection tasks according to the configured hourly, daily, and snapshot schedules. No user intervention is required.
+. *Per-collector defaults*: Each collector type has a default collection frequency (hourly, daily, or snapshot). The scheduler triggers collections based on these defaults.
+
+NOTE: GET-based auto-trigger (automatic collection when querying an endpoint) is not a supported mechanism in AAP 2.7. Manual POST and scheduled cron are the only documented trigger methods.
+
+=== Collection windows and timing
+
+When `since` and `until` are omitted from an on-demand POST, the API applies
+mode-specific defaults:
+
+* *Hourly collectors*: The previous complete hour.
+* *Daily collectors*: The previous complete day.
+* *Snapshot collectors*: No time window (point-in-time capture).
+
+These defaults apply to the queued API task; they do not backfill the full
+retention period. To request a different window, include explicit `since` and
+`until` values in the POST body.
+
+For collection lag and processing time details, see Understand analytics API architecture and performance.
+
+== Scheduling additional collectors
+
+Only System Administrators can create or manage recurring collection tasks. System Auditors can read analytics reports and task status, but cannot trigger a collection or create, update, or remove a recurring schedule. If an auditor needs an additional collector scheduled, ask a System Administrator to create the recurring task.
+
+To collect an enabled collector automatically at a customer-defined interval, a System Administrator can create a recurring task through the metrics-service task API. Use the mode-specific function and the collector's internal `collector_type` value:
+
+[source,http]
+----
+POST https://<gateway-hostname>/api/metrics/v1/tasks/schedule_recurring/
+----
+
+For example, to collect host metrics daily:
+
+[source,json]
+----
+{
+  "name": "collect-main-host-metrics",
+  "function_name": "collect_daily_metrics",
+  "task_data": {
+    "collector_type": "main_hostmetric"
+  },
+  "cron_expression": "0 2 * * *"
+}
+----
+
+Use `collect_hourly_metrics` for hourly collectors, `collect_daily_metrics` for daily collectors, and `collect_snapshot_metrics` for snapshot collectors. The public collector name is used in analytics URLs; recurring task data uses the internal `collector_type` value shown in the collector mapping above.
+
+Manage customer-created recurring tasks with:
+
+[source,http]
+----
+GET    https://<gateway-hostname>/api/metrics/v1/tasks/
+GET    https://<gateway-hostname>/api/metrics/v1/tasks/<task-id>/
+DELETE https://<gateway-hostname>/api/metrics/v1/tasks/<task-id>/
+----
+
+The list response includes each task's `cron_expression`, function, task data, and status. Deleting a customer-created recurring task removes its recurring template. Built-in system tasks are protected and cannot be removed through the normal delete operation.
+
+== Security model and data exposure
+
+The analytics API exposes a defined allowlist of {ControllerName} data. Understanding what is and is not exposed is critical for security review and compliance.
+
+=== Data included in the analytics API
+
+The following data classes are available through the analytics API:
+
+* Job execution metadata (job ID, start time, finish time, status, launch type)
+* Task execution details, including task and action fields, host information, and success status
+* Host and inventory counts (total hosts, active hosts, organization attribution)
+* Resource counts (organizations, teams, users, credentials, projects, templates)
+* Cluster topology and configuration (node count, capacity, health status)
+* Playbook and role names (no content or task details)
+* Hostnames and IP addresses (customer domain data)
+* Indirect node audit records (indirect node counts, organization attribution, collection timestamps)
+
+=== Data excluded from the analytics API
+
+The following sensitive data is *not* exposed through the analytics API:
+
+* Playbook file content
+* Task stdout or stderr output
+* Credential values (passwords, tokens, API keys, SSH keys)
+* Secret fields from custom credential types
+* Module arguments containing sensitive data
+* `extra_vars` values
+* Vault-encrypted data
+* User email addresses and personal identifiable information (where applicable)
+* Launcher usernames are not exposed by the analytics API. Data collected before this protection was applied may require separate retention or cleanup handling.
+
+=== Shared responsibility model
+
+*Red Hat responsibility:*
+
+* Enforce RBAC at the API gateway
+* Provide token rotation and revocation mechanisms
+* Limit data exposure to the defined allowlist
+* Secure data in transit (HTTPS only)
+
+*Customer responsibility:*
+
+* Secure authentication tokens (store in secrets manager, rotate regularly)
+* Control access to BI tools that consume analytics data
+* Apply appropriate data retention policies in BI systems
+* Secure analytics data at rest in BI tool databases
+* Monitor and audit BI tool access logs
+
+IMPORTANT: Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility. The analytics API provides the data; you control how it is stored, accessed, and retained in your BI environment.
+
+== API specification
+
+The running metrics-service instance publishes its OpenAPI schema over HTTPS:
+
+[source,text]
+----
+https://<gateway-hostname>/api/metrics/v1/docs/schema/
+----
+
+Interactive Swagger documentation is available at:
+
+[source,text]
+----
+https://<gateway-hostname>/api/metrics/v1/docs/
+----
+
+Use the deployed schema as the authoritative source for endpoint paths, parameters, response formats, and collector-specific payload fields.
+
+== Deployment coverage
+
+The analytics API is available in the following {PlatformNameShort} deployment types:
+
+[options="header"]
+|===
+|Deployment type |Availability |Notes
+|Containerized (RHEL 9) |Yes |Full analytics API access
+|{OCPShort} (Operator) |Yes |Full analytics API access
+|Managed Cloud |Yes |May have shorter retention periods than self-managed deployments
+|===
+
+For Managed Cloud deployments, contact Red Hat Support to confirm the retention period for your environment.
+
+== Related links
+
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* Understand analytics API architecture and performance
+* xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary]
