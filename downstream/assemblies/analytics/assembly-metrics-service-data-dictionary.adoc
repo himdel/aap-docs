@@ -313,7 +313,7 @@ Payload fields are relative to the payload root. `[]` denotes an array item and 
 |`[].job_created` |date-time |No |Yes |Creation time of the related job.
 |`[].job_remote_id` |integer |No |Yes |Controller job ID.
 |`[].job_template_remote_id` |integer |No |Yes |Controller unified job template ID.
-|`[].job_template_name` |string |No |Yes |Unified job template name.
+|`[].job_template_name` |string |No |Yes |Name of the related job.
 |`[].inventory_remote_id` |integer |No |Yes |Controller inventory ID.
 |`[].inventory_name` |string |No |Yes |Controller inventory name.
 |`[].organization_remote_id` |integer |No |Yes |Controller organization ID.
@@ -711,7 +711,7 @@ Payload fields are relative to the payload root. `[]` denotes an array item and 
 |`schedule` |integer |No |Yes |Number of schedules.
 |`notification_template` |integer |No |Yes |Number of notification templates.
 |`inventories` |object |No |Yes |Inventory counts keyed by inventory kind; always includes normal and smart.
-|`inventories.{key}` |integer |No |Yes |Value associated with the dynamic object key.
+|`inventories.{key}` |integer |No |Yes |Number of inventories of this kind.
 |`unified_job` |integer |No |Yes |Unified jobs, excluding project syncs.
 |`active_host_count` |integer |No |Yes |Number of active hosts.
 |`active_sessions` |integer |No |Yes |Number of active sessions.
@@ -835,7 +835,7 @@ Payload fields are relative to the payload root. `[]` denotes an array item and 
 |`{inventory_id}.sources` |integer |No |Yes |Number of sources in the inventory.
 |`{inventory_id}.source_list` |array of object |No |Yes |Inventory sources and their host counts.
 |`{inventory_id}.source_list[].name` |string |No |Yes |Inventory source name.
-|`{inventory_id}.source_list[].source` |string |No |Yes |Inventory source type or URL.
+|`{inventory_id}.source_list[].source` |string |No |Yes |Inventory source type.
 |`{inventory_id}.source_list[].num_hosts` |integer |No |Yes |Number of hosts associated with the source.
 |===
 
@@ -896,7 +896,7 @@ Payload fields are relative to the payload root. `[]` denotes an array item and 
 |===
 |Field |Type |Required |Nullable |Description
 |`{scm_type}` |object key |No |No |Top-level object key identifying the record by `scm_type`.
-|`{scm_type}.value` |integer |No |Yes |Value associated with the dynamic object key.
+|`{scm_type}.value` |integer |No |Yes |Number of projects of this type.
 |===
 
 === Table 27: `controller.projects_by_scm_type_org`
@@ -935,7 +935,7 @@ Payload fields are relative to the payload root. `[]` denotes an array item and 
 |Field |Type |Required |Nullable |Description
 |`[].id` |integer |No |No |Unified job template identifier.
 |`[].polymorphic_ctype_id` |integer |No |Yes |Django content type identifier for the concrete template.
-|`[].model` |string |No |Yes |Concrete template type, for example job_template or project.
+|`[].model` |string |No |Yes |Concrete template type, for example jobtemplate, workflowjobtemplate, or project.
 |`[].execution_environment_image` |string |No |Yes |Execution environment image used by the template.
 |`[].created` |date-time |No |Yes |Template creation time.
 |`[].modified` |date-time |No |Yes |Template last-modification time.
