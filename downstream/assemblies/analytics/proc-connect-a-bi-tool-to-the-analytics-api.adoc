@@ -1,0 +1,164 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-connect-a-bi-tool-to-the-analytics-api"]
+
+= Connect a BI tool to the analytics API
+
+[role="_abstract"]
+You can connect a business intelligence (BI) tool or REST client to the {PlatformNameShort} analytics API to visualize and analyze automation data.
+
+
+.Prerequisites
+
+* You have System Administrator or System Auditor role access to {ControllerName}.
+* Your {ControllerName} deployment is running AAP 2.7 or later.
+* You have installed and configured a BI tool or REST client that supports JSON API data sources.
+
+.Context
+
+The analytics API provides programmatic access to {ControllerName} data
+through HTTP endpoints. It lets you pull raw data into your own BI tool for
+custom dashboards, reports, and analysis.
+
+This procedure demonstrates the generic workflow from token creation through a
+first API call. Use the API contract, data model, BI integration patterns,
+freshness, and resilience topics for tool-specific implementation decisions.
+
+.Procedure
+
+=== 1. Create an authentication token in {ControllerName}
+
+. From the navigation panel in {ControllerName}, select *Access* > *Users*.
+
+. Select your user account.
+
+. Select the *Tokens* tab.
+
+. Click *Add*.
+
+. In the *Application* field, leave the default (empty) or select an OAuth2 application if you have one configured.
+
+. In the *Scope* field:
+
+   * Select *Read* for read-only access (required for System Auditor role).
+   * Select *Write* if you need to trigger collection cycles programmatically (System Administrator only).
+
+
+
+. Click *Save*.
+
+. Copy the generated token and store it securely. You cannot retrieve the token value after closing the dialog.
+
+IMPORTANT: Treat this token like a password. Store it in a secrets manager or secure credential vault. Do not commit it to version control or share it in plain text.
+
+=== 2. Verify API access with a test request
+
+Before configuring your BI tool, verify that the analytics API is accessible and that your token works.
+
+. Open a terminal on a machine with network access to your {ControllerName}.
+
+. Run the following curl command to list available collectors:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<gateway-hostname>/api/metrics/v1/analytics/
+----
+
+   Replace `<your-token>` with the token you created in step 1, and `<gateway-hostname>` with your {ControllerName} hostname or IP address.
+
+
+
+. Verify that the response is a JSON object listing available collectors. If you receive a 401 Unauthorized response, verify that the token is correct and has not been deleted.
+
+. Test retrieving data from a specific collector:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  https://<gateway-hostname>/api/metrics/v1/analytics/controller.unified_jobs_dashboard/?page=1&page_size=10
+----
+
+   This retrieves up to 10 collection envelopes. The job execution records
+   are nested in each envelope's `payload`; `page_size` does not count records
+   inside a payload.
+
+=== 3. Configure your BI tool
+
+Configure your BI tool or REST client with the analytics API base URL and the
+Bearer token created in the previous steps.
+
+. Set the base URL to:
+
+   `https://<gateway-hostname>/api/metrics/v1/analytics/`
+
+. Send the token in the `Authorization: Bearer <your-token>` header.
+
+. Request the discovery endpoint to confirm access and identify enabled
+   collectors:
+
+   `GET /api/metrics/v1/analytics/`
+
+. For collector queries, preserve the collection envelope fields and flatten
+   each envelope's `payload` before treating its contents as event or job
+   records. The API returns collection envelopes, not flat rows.
+
+. Use the following topics for the detailed contracts and workflows:
+   * xref:ref-analytics-api-reference[Analytics API reference] for endpoints, authentication, RBAC, and response
+     formats.
+   * xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention] for payload fields,
+     joins, organization filtering, and retention.
+   * xref:con-analytics-api-bi-integration-patterns[Analytics API BI integration patterns] for loading and refreshing data.
+   * xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields] for freshness
+     checks.
+   * xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience] for retries and failures.
+
+.Result
+
+Your BI tool is now connected to the analytics API and can query {ControllerName} data. You can create custom dashboards, reports, and visualizations based on the raw per-collector data feeds.
+
+.Post-requisites
+
+=== Set up a refresh schedule
+
+Configure your BI tool to refresh data on a schedule that aligns with the analytics collection window:
+
+   . Use the discovery response to determine whether each collector is hourly,
+      daily, or a snapshot. The analytics API provides per-collector collection
+      metadata; it is not governed by a single universal collection interval.
+
+   . Schedule BI refreshes according to the collector mode and use `finished_at`
+      or `last_collect` to confirm freshness after collection completes.
+
+   . The analytics API is batch-oriented; real-time streaming is not supported.
+
+For collection timing and processing details, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+=== Monitor for stale data
+
+Verify that analytics data is current by checking collection timing metadata:
+
+* For job events: Validate the envelope's `finished_at`; payload timestamps include `modified` and `job_created` in `controller.events_table`.
+* For daily collectors: Validate the envelope's `finished_at`; payload fields are collector-specific (for example, `created`, `modified`, or `last_automation`).
+* For snapshot collectors: Use the discovery entry's `last_collect` and the envelope's `finished_at`; snapshot payload fields are collector-specific.
+
+For a complete data freshness verification procedure, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+=== Secure your BI tool database
+
+Once analytics data is pulled from the API into your BI tool, securing that copy is your responsibility as a customer. Apply appropriate security controls:
+
+* Enable authentication and role-based access control (RBAC) in your BI tool.
+* Encrypt BI tool database storage at rest.
+* Configure data retention policies to comply with your organization's security requirements.
+* Audit BI tool access logs to detect unauthorized data access.
+
+For the shared responsibility model, see xref:ref-analytics-api-reference[Analytics API reference].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:con-understand-analytics-api-data-model-and-retention[Understand analytics API data model and retention]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-controller-analytics-gathering[Analytics gathering]
+* xref:proc-controller-configure-analytics[Configure {Analytics}]

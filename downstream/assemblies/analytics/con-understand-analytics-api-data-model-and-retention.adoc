@@ -1,0 +1,207 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-understand-analytics-api-data-model-and-retention"]
+
+= Understand analytics API data model and retention
+
+[role="_abstract"]
+The analytics API serves separate, non-pre-joined per-collector data feeds from {ControllerName}. Understanding the data model, retention policies, and join paths helps you build effective queries in your BI tool.
+
+
+== Per-collector feeds
+
+The analytics API exposes per-collector feeds, not pre-joined tables. Each collector returns collection results for one data source; the API does not join data across collectors.
+
+* You must perform joins in your BI tool using fields returned by the relevant collectors.
+* No general organization filter is available in the API. Filter by organization in your BI tool after retrieving the data.
+* Complex multi-table joins and aggregations happen in your BI tool, not in the API.
+
+This design keeps API response times fast and predictable by leaving cross-collector joins and aggregations to the BI tool.
+
+== Available collectors and organization fields
+
+The following collectors expose organization attribution fields that enable BI-side filtering and grouping.
+
+=== Collectors with direct organization fields
+
+[options="header"]
+|===
+|Collector name |Organization field |Record type
+|`controller.unified_jobs_dashboard` |`organization_id` |Job execution records
+|`controller.unified_jobs` |`organization_id` |Unified job records
+|`controller.job_host_summary_service` |`organization_remote_id` |Per-job host summary records
+|`controller.job_host_summary` |`organization_remote_id` |Per-job host summary records
+|`controller.credentials_service_org` |`organization_id` |Credential types grouped by job organization
+|`controller.cred_type_counts_org` |`organization_id` |Credential counts grouped by organization and type
+|`controller.inventory_counts_org` |`organization_id` |Inventory, host, and source counts grouped by organization
+|`controller.org_counts` |`organization_id` (top-level object key) |Organization user and team counts
+|`controller.projects_by_scm_type_org` |`organization_id` |Project counts grouped by organization and SCM type
+|`controller.main_host` |`organization_remote_id` |Current host records
+|`controller.main_host_daily` |`organization_remote_id` |Daily host activity aggregates
+|`controller.main_indirectmanagednodeaudit` |`organization_remote_id` |Indirect node audit records
+|===
+
+=== Per-organization aggregate collectors
+
+The following collectors provide organization-level aggregates directly. They
+are separate feeds, not an organization filter on another collector. Each
+returns array records containing `organization_id` and `organization_name`.
+
+[options="header"]
+|===
+|Collector name |Mode |Organization-level data
+|`controller.unified_jobs_org` |Hourly |Job count, failure count, and total and average elapsed time grouped by organization, job type, and status
+|`controller.credentials_service_org` |Hourly |Managed credential types used by jobs, grouped by job organization
+|`controller.cred_type_counts_org` |Snapshot |Credential count grouped by organization and credential type, including managed status
+|`controller.inventory_counts_org` |Snapshot |Inventory, host, and source counts grouped by organization and inventory kind
+|`controller.projects_by_scm_type_org` |Snapshot |Project count grouped by organization and source-control type
+|===
+
+These five organization-aware aggregate collectors are enabled for the
+analytics API but are not part of the default metrics-service recurring
+schedule. Use the discovery response to confirm that a collector is enabled,
+then collect it on demand or create an explicit recurring task.
+
+=== How to collect and use organization aggregates
+
+. Query `GET /api/metrics/v1/analytics/` and select the required collector's
+   `rows_url`. The discovery response identifies its mode and whether it
+   accepts `since` and `until` bounds.
+. For an on-demand collection, POST to the collector's `collect_url`:
+   * Use `collect_hourly_metrics` for `unified_jobs_org` and
+     `credentials_service_org`.
+   * Use `collect_snapshot_metrics` for `cred_type_counts_org`,
+     `inventory_counts_org`, and `projects_by_scm_type_org`.
+. Read the paginated collection envelopes from `rows_url` after the task
+   completes, and flatten each array payload into BI records.
+. Group or filter by `organization_id` in the BI tool. The API does not
+   provide a server-side `?organization_id=` filter, including for these
+   pre-aggregated collectors.
+
+Use the collection envelope's `cluster_id` together with an organization ID
+when combining data from multiple {ControllerNameStart} installations. Organization IDs
+can overlap between installations.
+
+=== Collectors without organization fields
+
+The following collectors capture cluster-wide or non-organization-scoped data:
+
+* Use the discovery response to identify available snapshot collectors.
+* `controller.main_hostmetric` (host performance metrics)
+* `controller.main_jobevent_service` and `controller.events_table` (join event job IDs to a job collector for organization attribution)
+* `controller.workflow_job_node_table` (workflow nodes, join to jobs for organization attribution)
+
+== Using data from multiple collectors
+
+The API does not join data from different collectors. Retrieve each collector's data, inspect the fields returned for that collector, and perform any joins or aggregations in your BI tool. Use the discovery response and the metrics-service API specification to confirm available fields and join keys.
+
+== Events to collection metadata (derive collection name and version)
+
+To determine which Ansible collection and version was used for each task, join event data with job data. The event's resolved_action field contains the fully qualified collection name (FQCN), and the job's installed_collections object provides version information.
+
+*Required collectors:*
+
+* controller.main_jobevent_service (provides resolved_action per event)
+* controller.unified_jobs_dashboard (provides installed_collections per job)
+
+*Join path:*
+
+Match events to jobs
+
+[source,sh]
+----
+ SELECT
+ e.cluster_id,
+ e.job_remote_id,
+ e.resolved_action,
+ j.installed_collections
+ FROM controller.main_jobevent_service AS e
+ INNER JOIN controller.unified_jobs_dashboard AS j
+ ON e.cluster_id = j.cluster_id
+ AND e.job_remote_id = j.id
+----
+
+*Derive collection name and version:*
+
+. Extract the collection name from the event's resolved_action FQCN:
+    - Example: resolved_action = "ansible.posix.mount"
+    - Collection name = first two parts = "ansible.posix"
+. Look up the version in the job's installed_collections object:
+    - Search installed_collections for the key matching the collection name
+    - Example: {"ansible.posix": {"version": "1.5.4"}}
+    - Collection version = "1.5.4"
+
+*Result:* Each event can be attributed to a specific collection name and version.
+
+IMPORTANT: Use cluster_id in the join because job IDs can overlap across different {ControllerNameStart} installations.
+
+== Data retention and rolling windows
+
+The analytics API retains data according to a rolling-window policy. Understanding retention limits helps you set appropriate BI tool refresh schedules and avoid data loss.
+
+=== Default retention period
+
+For scheduled cleanup, metrics service resolves retention from enabled {ControllerNameStart} cleanup_jobs schedules. The lowest valid positive days value wins. If {ControllerNameStart} is unreachable or no valid schedule exists, retention falls back to 90 days. The analytics_retention_days task argument is an explicit override, not the normal scheduled default.
+
+*How retention works:*
+
+* Data older than the retention period is purged automatically.
+* Purging happens on a rolling basis (not at fixed calendar intervals).
+* Once purged, data is not recoverable through the API.
+
+*Recommendation:* Pull analytics data frequently (daily or more often) rather than relying on extended retention for long-term history. Store historical data in your BI tool database, not the analytics API.
+
+=== Managed Cloud retention
+
+Managed Cloud deployments may have shorter retention periods than self-managed deployments. Contact Red Hat Support to confirm the retention period for your Managed Cloud environment.
+
+=== Indirect node data retention
+
+The `controller.main_indirectmanagednodeaudit` collector has a *shorter effective retention window* than other collectors due to upstream controller table purging.
+
+*Binding constraints:*
+
+. *{ControllerNameStart} audit table purge*: 7 days (`INDIRECT_HOST_AUDIT_RECORD_MAX_AGE_DAYS = 7` in controller settings).
+. *Collection error fallback*: 3 days (`INDIRECT_HOST_QUERY_FALLBACK_GIVEUP_DAYS = 3` in controller settings).
+
+The API retention period applies only to data that was successfully collected from the controller. For indirect node audit data, anything the metrics service did not collect within 7 days of the job running never reaches the API at all, regardless of the configured retention period.
+
+If event collection errors occur for a job, the controller abandons indirect node audit record creation after 3 days. That job's indirect node data will never appear in the analytics API.
+
+*Recommendation:* For indirect node reporting, configure your BI tool to pull data at least every 5 days to avoid gaps caused by the upstream controller purge.
+
+== No organization-level query filter
+
+The analytics API does not provide a server-side organization-level query filter parameter. You cannot pass `?organization_id=<org-id>` to the API to filter results before they are returned.
+
+*How to filter by organization:*
+
+. Retrieve the full result set from the collector endpoint (optionally filtered by time range using `since` and `until`).
+. Filter by `organization_id` in your BI tool query after the data is retrieved.
+
+This is a deliberate design choice to keep API query paths simple and performant. Client-side filtering in BI tools is fast and flexible, and avoids complex query optimization on the controller side.
+
+== Collection timing and payload timestamps
+
+Collection envelopes expose authoritative timing metadata for every collector.
+Use the discovery entry's `last_collect` and each envelope's `started_at` and
+`finished_at` to verify that a collection cycle has completed. Payload fields
+are collector-specific and are additional validation only.
+
+[options="header"]
+|===
+|Collector type |Payload-level fields, when useful |Example collector
+|Snapshot |Collector-specific; no universal timestamp field |Any snapshot collector returned by discovery
+|Daily |`created`, `modified`, or `last_automation`, depending on the collector |`controller.main_host_daily`
+|Hourly |`modified` and `job_created` |`controller.events_table`
+|===
+
+For a step-by-step procedure to verify data currency using these fields, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]
+* xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
+* xref:assembly-metrics-service-data-dictionary[Metrics-service Analytics API Data Dictionary]

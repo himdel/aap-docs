@@ -7,17 +7,13 @@
 
 include::attributes/attributes.adoc[]
 
-
-// Book Title
 = Using automation analytics
 
-[role="_abstract"] 
-This guide shows how to use the features of automation analytics to evaluate how automation is deployed across your environments and the savings associated with it.
+[role="_abstract"]
+This guide describes Automation Analytics and the analytics API for Ansible Automation Platform.
 
-// Downstream content only
 include::{Boilerplate}[]
 
-// Contents
 include::analytics/assembly-evaluating-automation-return.adoc[leveloffset=+1]
 
 include::analytics/assembly-automation-savings-planner.adoc[leveloffset=+1]
@@ -27,3 +23,7 @@ include::analytics/assembly-insights-reports.adoc[leveloffset=+1]
 include::analytics/assembly-using-job-explorer.adoc[leveloffset=+1]
 
 include::analytics/assembly-data-dictionary.adoc[leveloffset=+1]
+
+include::analytics/assembly-metrics-service-data-dictionary.adoc[leveloffset=+1]
+
+include::analytics/assembly-analytics-api.adoc[leveloffset=+1]

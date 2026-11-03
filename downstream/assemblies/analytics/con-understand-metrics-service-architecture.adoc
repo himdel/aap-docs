@@ -1,0 +1,177 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-understand-metrics-service-architecture"]
+
+= Understand metrics service architecture
+
+[role="_abstract"]
+Learn the architectural components and deployment topology of metrics service to make informed infrastructure decisions and ensure successful integration with {PlatformNameShort}.
+
+
+== Keywords
+
+* metrics service
+* architecture
+* deployment
+* containerized installer
+* operator
+* analytics API
+
+== Metrics service overview
+
+Metrics service is a Django-based application component of {PlatformNameShort} 2.7. It collects anonymized usage and performance data from your {ControllerName}. The service runs as containerized workloads managed by either systemd (containerized installer) or Kubernetes (operator). It maintains its own PostgreSQL database and read-only access to the controller database.
+
+== Default behavior in {PlatformNameShort} 2.7
+
+Metrics service is available in {PlatformNameShort} 2.7 for both operator-based (OpenShift) and containerized installations that include {ControllerName}. The steps required to enable it depend on your deployment type.
+
+* *Containerized installations:* Metrics service requires explicit deployment. Add the `[automationmetrics]` inventory group when installing {PlatformNameShort} if `automationcontroller` is present in the inventory file. To skip metrics service installation, set `automationmetrics_skip_install=true` in `[all:vars]`.
+* *Operator installations (on-premise):* Metrics service deployment and enablement are operator-managed. Follow the supported AAP deployment documentation; this topic does not define an operator enablement or opt-out setting.
+* *Managed cloud (Red Hat-hosted):* Metrics service is pre-installed. No additional configuration is required to enable analytics API access.
+
+== Key characteristics
+
+* *Django-based application:* Built on Django framework with database migrations managed through `/app/scripts/init.sh`
+* *Containerized deployment:* Runs as three containers (`automation-metrics-web`, `automation-metrics-tasks`, `automation-metrics-scheduler`) managed by systemd (containerized installer) or Kubernetes (operator)
+* *Optional deployment:* Set `automationmetrics_skip_install=true` to opt out of metrics service installation when {ControllerName} is present (containerized installations only)
+* *Automatic anonymization:* Customer-defined object names are replaced with "Custom" before transmission. Only built-in object names and publicly available collection names are sent in their original form
+* *Auto-configured ingress:* Establishes secure connection to Red Hat Data Ingress without manual setup
+* *Read-only access:* Accesses {ControllerName} database in read-only mode to prevent operational impact
+* *Isolated database:* Maintains its own `metrics_service` database for metrics processing and storage
+* *Health monitoring:* Provides health check endpoint (returns `"status": "healthy"` when healthy)
+* *HTTP proxy support:* Supports HTTP/HTTPS proxy configuration for environments without direct internet access
+* *Startup validation:* Validates required production environment variables at startup. Containers exit immediately with validation errors if required variables are missing or invalid
+* *Deployment flexibility:* Supports both RHEL-based containerized deployments and OpenShift operator-based deployments with different configuration approaches
+
+=== Capabilities unavailable without metrics service
+
+* Automation dashboard has no backend data source and is non-functional
+* No anonymized usage data is collected or transmitted
+* ROI calculations, automation savings, and executive reporting are unavailable
+* Dashboard collection tasks do not run
+* The analytics API is unavailable; external BI and reporting tools cannot retrieve automation data
+
+== Relationship to automation dashboard
+
+Metrics service serves as the unified backend for automation dashboard. Metrics service collects additional dashboard-specific metrics, including:
+
+* Cost and pricing data for ROI calculations
+* Automation savings metrics
+* Executive reporting data
+
+Dashboard collection is enabled by default when metrics service is installed. Dashboard collection runs on an hourly schedule.
+
+== Architecture components
+
+=== Core components
+
+[options="header"]
+|===
+|Component |Container Name |Purpose
+|*Metrics service (web)* |`automation-metrics-web` |Nginx reverse proxy + Gunicorn serving the Django application. Health endpoint: `/health/`
+|*Metrics service (tasks)* |`automation-metrics-tasks` |Async task worker for background job execution
+|*Metrics service (scheduler)* |`automation-metrics-scheduler` |APScheduler process that triggers periodic data collection tasks
+|*metrics_service database* |PostgreSQL database |Stores processed metrics data, analytics payloads, and configuration
+|*awx/{ControllerName} database (read-only)* |PostgreSQL database |Source of {ControllerName} usage data. Accessed via `ms_awx_readonly` user (SELECT-only)
+|===
+
+=== Database architecture
+
+[options="header"]
+|===
+|Database |User |Privileges |Purpose
+|`metrics_service` |`metrics_service` |ALL |Metrics service own data storage, schema migrations, configuration. Stores analytics payloads in the `AnalyticsPayload` table.
+|*awx/{ControllerName}* |`ms_awx_readonly` |SELECT ON ALL TABLES IN SCHEMA public |Read-only access to controller data for metrics collection
+|===
+
+The two-database model ensures metrics service cannot modify controller data. The `ms_awx_readonly` user has only SELECT privileges on the {ControllerName} database.
+
+IMPORTANT: If the {ControllerName} database is unreachable, metrics service defers all collection tasks until connectivity is restored. This applies to all deployment topologies. When the controller database is unavailable, the analytics API `cluster_id` field is null, which may affect attribution in external analytics tools.
+
+== Deployment topology options
+
+The following table shows analytics API availability by deployment topology:
+
+[options="header"]
+|===
+|Topology |INSTALL_TYPE |Analytics API available |Notes
+|AIO Growth (All-in-One) |`containerized` |Yes |Single host, {ControllerName} and metrics service co-located. Explicit metrics service deployment required.
+|Enterprise Multi-Node |`containerized` |Yes |Dedicated metrics service node. Explicit metrics service deployment required.
+|Operator (OpenShift) |`operator` |Yes |Managed by Kubernetes operator; metrics service auto-provisioned when enabled in CR.
+|Managed cloud (Red Hat-hosted) |`operator` |Yes |Metrics service pre-installed; no manual deployment required.
+|===
+
+To skip metrics service installation in containerized deployments, set `automationmetrics_skip_install=true` in `[all:vars]` and omit the `[automationmetrics]` inventory group.
+
+For deployment-specific prerequisites, follow the supported deployment documentation for your topology.
+
+== Deployment method comparison
+
+Metrics service supports two deployment methods with different configuration complexity and automation levels:
+
+[options="header"]
+|===
+|Aspect |Containerized Installer |Operator (OpenShift)
+|*Deployment method* |Ansible role (`automationmetrics`) in containerized installation program |Kubernetes operator (`automation-metrics-operator`) managed by AAP gateway operator
+|*Configuration complexity* |Manual: requires inventory file edits, database passwords, network variables |Operator-managed; follow the supported AAP deployment documentation
+|*Database provisioning* |Administrator provisions databases and configures credentials in inventory |Operator automatically provisions databases and manages credentials via Kubernetes secrets
+|*Enablement* |Explicit: `[automationmetrics]` inventory group required in inventory file |Operator-managed on-premise; follow the supported AAP deployment documentation. Pre-installed in managed cloud (Red Hat-hosted) deployments.
+|*Opt-out mechanism* |`automationmetrics_skip_install=true` in `[all:vars]` |Follow the supported AAP deployment documentation; no operator opt-out setting is defined here
+|===
+
+== Containerized installer deployment details
+
+Metrics service is deployed through the `automationmetrics` Ansible role. Hosts must be added to `[automationmetrics]` inventory group unless `automationmetrics_skip_install=true` is set.
+
+== Operator-based deployment details
+
+Metrics service is deployed through the `automation-metrics-operator` running on OpenShift. The AAP gateway operator manages the metrics operator lifecycle.
+
+== Analytics API
+
+Metrics service exposes an analytics API that provides authorized external tools with direct access to collected metrics data. The API is mounted at `/api/metrics/v1/analytics/` through the platform gateway. Use this API to integrate collected automation data with your own business intelligence (BI) or reporting tools.
+
+The API requires the System Administrator or Platform Auditor role. All requests must be authenticated through the platform gateway.
+
+=== Analytics data paths
+
+Metrics service maintains two distinct data paths from the controller database. Understanding the difference between these paths is important when integrating external BI tools.
+
+The *raw analytics path* delivers data directly to your authorized tools through the analytics API: {ControllerNameStart} DB → `collector.gather()` → `persist_analytics_payload()` → `AnalyticsPayload` table → `/api/metrics/v1/analytics/`. This path is verbatim and non-anonymized (customer-owned data is retained in the metrics service database and is not modified before being served by the API). External BI integrations receive the unanonymized, pre-rollup collector output from the `AnalyticsPayload` table.
+
+The *telemetry rollup path* delivers anonymized data to Red Hat for product improvement: `collector.gather()` → `prepare()` → anonymization → Segment transmission to Red Hat. Customer-defined object names are replaced before transmission, and the data is aggregated and anonymized before leaving your environment.
+
+IMPORTANT: The analytics API serves raw, pre-rollup collector output (not the same anonymized data transmitted to Red Hat through the telemetry rollup path). Your BI integrations receive unanonymized, customer-owned data from the `AnalyticsPayload` table. Treat this data with the same data handling practices you apply to other non-anonymized operational data.
+
+=== Available operations
+
+[options="header"]
+|===
+|Operation |Endpoint |Method |Description
+|Discovery |`/api/metrics/v1/analytics/` |GET |Returns the list of available collectors and their metadata.
+|Data retrieval |`/api/metrics/v1/analytics/<collector>/` |GET |Returns paginated collection results for the specified collector. Supports `since` and `until` query parameters.
+|On-demand collection |`/api/metrics/v1/analytics/<collector>/collect/` |POST |Triggers a collection task for the specified collector. Returns HTTP 202 Accepted with a task_id and task_url.
+|===
+
+=== Collectors
+
+Use the discovery endpoint for the current collector list, what each collector returns, its collection mode, whether it supports time windows, and its collection URLs.
+
+=== Collection scheduling
+
+Metrics service supports two collection modes:
+
+* *On-demand collection:* Triggered by sending a POST request to `/api/metrics/v1/analytics/<collector>/collect/`. On-demand collection queues a task for the specified collector only, outside the scheduled window. The endpoint returns HTTP 202 Accepted with a task_id and task_url.
+* *Recurring scheduled collection:* Three mode-specific functions run on the scheduler: `collect_hourly_metrics` (hourly), `collect_daily_metrics` (daily), and `collect_snapshot_metrics` (daily). For task scheduling configuration and management procedures, see your {PlatformNameShort} task scheduling documentation.
+
+=== Payload retention
+
+Analytics payload retention is resolved by the scheduled cleanup task from the {ControllerNameStart} `cleanup_jobs` schedule, with a 90-day fallback when {ControllerNameStart} is unreachable or no valid schedule exists. The `analytics_retention_days` task argument can override this for an explicit task run. Data older than the resolved retention period is purged by `cleanup_metrics_data`. For storage guidance, follow the supported deployment documentation for your topology.
+
+=== Cluster identification
+
+Each analytics payload includes a `cluster_id` field that identifies the {ControllerName} instance. The `cluster_id` value equals the controller installation UUID. If the {ControllerName} database is unreachable at collection time, `cluster_id` is null. This condition is non-fatal: the payload is still persisted and available through the API, but attribution by cluster in external analytics tools may be affected until connectivity is restored.
+
+== Related links
+
+* Install metrics service with containerized installer

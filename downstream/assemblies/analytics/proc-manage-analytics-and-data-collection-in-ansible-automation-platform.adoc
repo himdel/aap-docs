@@ -1,0 +1,43 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-manage-analytics-and-data-collection-in-ansible-automation-platform"]
+
+= Manage analytics and data collection in {PlatformNameShort}
+
+[role="_abstract"]
+You can control how {ControllerName} collects and ships {Analytics} data, including opting in or out, adjusting collection settings, recovering from missed collection cycles, and aligning your BI tool refresh schedule with the collection window.
+
+
+== Overview
+
+{Analytics} collects data from {ControllerName} on a predefined
+upstream schedule (the default shipping window is 4 hours) and ships it to the
+Red Hat Hybrid Cloud Console. This is separate from the metrics-service
+analytics API collector schedules. Understanding the distinction helps you
+verify freshness, recover from failures, and configure downstream tools.
+
+For details on what data is collected and how collector types affect freshness, see the related links at the end of this topic.
+
+== Recovering from a missed collection cycle
+
+A missed or failed collection cycle creates a data gap for that window's time period. {ControllerNameStart} does not automatically backfill gaps (the next successful collection covers only events in the new window).
+
+To detect and recover from a missed collection cycle, see the related links at the end of this topic. To trigger an immediate data collection outside the scheduled window, run the `awx-manage gather_analytics --ship` command. For the full procedure, see the related links at the end of this topic.
+
+No collection-status or backfill-status API endpoint is available; use the
+collection timing metadata and freshness procedure to confirm that a
+collection cycle has completed. See Verify analytics data freshness using
+timestamp fields.
+
+== Aligning BI tool refresh with the collection window
+
+Because {Analytics} collection is batch-only, refreshing a BI tool immediately after a collection window closes risks querying incomplete data. Schedule BI tool refresh to run at least 1–2 minutes after the window closes to allow collection processing to complete.
+
+For configuration instructions and the BI refresh offset formula, see the related links at the end of this topic.
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* xref:proc-connect-a-bi-tool-to-the-analytics-api[Connect a BI tool to the analytics API]
+* xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]

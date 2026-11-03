@@ -5,14 +5,87 @@
 = Analytics gathering
 
 [role="_abstract"]
-Use this command to gather analytics on-demand outside of the predefined window (the default is 4 hours):
+{ControllerNameStart} collects and ships {Analytics} data on a predefined upstream schedule; the default shipping window is 4 hours. This is separate from the metrics-service analytics API, whose collectors run on hourly, daily, or snapshot schedules. You can trigger upstream collection on demand using `awx-manage gather_analytics --ship`.
 
-`$ awx-manage gather_analytics --ship`
+
+== On-demand collection
+
+To gather analytics data outside the predefined collection window, run the following command:
+
+[source,sh]
+----
+$ awx-manage gather_analytics --ship
+----
 
 For customers with disconnected environments who want to collect usage information about unique hosts automated across a time period, use this command:
 
-`awx-manage host_metric --since YYYY-MM-DD --json`
+[source,sh]
+----
+$ awx-manage host_metric --since YYYY-MM-DD --json
+----
 
-The `--since` parameter is optional. 
+The `--since` parameter is optional.
 
 The `--json` flag specifies the output format and is optional.
+
+== Collection lag
+
+For the upstream {Analytics} shipping path, data freshness is
+determined by a two-stage process. The total observable lag between job
+completion and data availability through that path is the sum of these two
+stages. This four-hour estimate does not describe an on-demand metrics-service
+API request.
+
+. *Collection window wait:* The time from job completion until the next scheduled collection window triggers. For the default 4-hour window, this wait can be up to 4 hours.
+. *Collection processing time:* The time required to gather, package, and ship analytics data after the collection window opens. Processing time varies with the volume of job events accumulated since the previous collection.
+
+For observed processing times by event volume tier, see xref:ref-controller-data-collection-details[Details about data collected for {Analytics}].
+
+Processing time is additive to the collection window wait. For example, with the default 4-hour window and 10,000 events, data could lag up to approximately 4 hours and 18 seconds after a job completes.
+
+NOTE: System load on the {ControllerName} host can increase processing time beyond the observed figures above. Under high load conditions, allow additional time before querying the analytics API for fresh data.
+
+== Automatic collection trigger
+
+{ControllerNameStart} tracks the last successful collection using the `AUTOMATION_ANALYTICS_LAST_GATHER` setting. When the elapsed time since the last gather exceeds the configured collection interval, the next collection window automatically opens and triggers data gathering.
+
+The upstream collection interval defaults to 4 hours. You can verify or adjust
+this interval in the {ControllerName} settings. No public
+collection-status or backfill-status API endpoint is available to query the
+upstream shipping state directly. For metrics-service API collection metadata,
+see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+{Analytics} uses three source-data classifications. The metrics-
+service API exposes the corresponding collector modes through its discovery
+endpoint; see xref:ref-analytics-api-reference[Analytics API reference] for API scheduling semantics.
+
+=== Snapshot collectors
+
+Capture point-in-time data (for example, configuration and topology). Use the
+analytics API discovery `last_collect` and collection-envelope timing fields
+to verify freshness; payload fields are collector-specific.
+
+=== Daily collectors
+
+Collect metrics that aggregate over a day (for example, `main_host_daily`,
+`main_hostmetric`, and `main_indirectmanagednodeaudit`). Use the collection
+envelope's `finished_at` for API freshness; payload fields are
+collector-specific.
+
+=== Hourly collectors (CSV, high-cost)
+
+Collect large tabular data sets (for example, `events_table`,
+`unified_jobs_dashboard`, and `workflow_job_node_table`) using the hourly
+collection window. These collectors are the primary driver of collection
+processing time at high event volumes.
+
+For per-collector-type scheduling detail and timestamp field documentation, see xref:ref-controller-data-collection-details[Details about data collected for {Analytics}].
+
+To verify that your analytics data is current, see xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields].
+
+== Related links
+
+* xref:ref-analytics-api-reference[Analytics API reference]
+* Understand analytics API architecture and performance
+* xref:ref-controller-data-collection-details[Details about data collected for {Analytics}]
+* xref:proc-verify-analytics-data-freshness-using-timestamp-fields[Verify analytics data freshness using timestamp fields]

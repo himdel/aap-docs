@@ -1,0 +1,108 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-verify-analytics-data-freshness-using-timestamp-fields"]
+
+= Verify analytics data freshness using timestamp fields
+
+[role="_abstract"]
+You can verify whether {Analytics} data is current by checking the discovery endpoint's last_collect value and the collection timing fields. Payload timestamp fields provide additional validation when available.
+
+
+.Prerequisites
+
+* You have API access to the metrics-service analytics API through the platform gateway.
+* You know the expected schedule for the collector you are querying.
+
+.Context
+
+Metrics-service API collection is asynchronous. On-demand POST requests return
+`202 Accepted` with a task URL, while scheduled collectors run on hourly,
+daily, or snapshot schedules. Use the stored collection envelope timing and
+discovery metadata to verify freshness.
+
+The discovery endpoint reports last_collect for each collector. Each collection record also includes started_at and finished_at. Compare these values with the expected collection window to identify stale data.
+
+.Procedure
+
+. Identify the collector and its collection timing metadata.
+
+   Use the discovery entry's `last_collect` and the collection envelope's
+   `started_at`/`finished_at`. Payload timestamp fields are optional,
+   collector-specific validation:
+
+
+[options="header"]
+|===
+|Data |Primary freshness signal |Collector type
+|Any API collector |Discovery `last_collect`, or envelope `finished_at` |Snapshot, daily, or hourly
+|Job event payloads |`modified` and `job_created` when payload-level validation is useful |`controller.events_table`
+|Host payloads |Collector-specific fields such as `created`, `modified`, or `last_automation` |Daily or snapshot collectors
+|===
+
+
+
+. Check the collector's latest collection metadata.
+
+   Use the discovery endpoint to check last_collect. You can also request the collector rows and inspect the first result, which is the newest collection record.
+
+   *Examples:*
+
+   For *Job Events*, query the newest collection envelope and inspect its
+   `finished_at`; inspect `modified` or `job_created` inside `payload` when
+   payload-level validation is needed:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  "https://<gateway-hostname>/api/metrics/v1/analytics/controller.events_table/?page=1&page_size=1"
+----
+
+   For *System Data* (Daily collector), query the discovery entry or the
+   newest `main_host_daily` collection envelope:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  "https://<gateway-hostname>/api/metrics/v1/analytics/controller.main_host_daily/?page=1&page_size=1"
+----
+
+   For *Cluster Data* (Snapshot collector), use the discovery entry and the
+   newest collection envelope. Snapshot payload fields are collector-specific;
+   the current API registry does not define a universal cluster-state payload
+   or common `timestamp` field:
+
+[source,sh]
+----
+curl -H "Authorization: Bearer <your-token>" \
+  "https://<gateway-hostname>/api/metrics/v1/analytics/<snapshot-collector>/?page=1&page_size=1"
+----
+
+   Replace `<your-token>` with an authentication token created in {ControllerName}, and `<gateway-hostname>` with your {ControllerName} hostname. For how to create a token, see xref:ref-analytics-api-reference[Analytics API reference].
+
+
+
+. Compare the returned collection timing metadata against the expected window close time.
+
+   The expected collection close time depends on the collector mode and its
+   configured schedule. Compare `finished_at`/`last_collect` with that expected
+   close time; do not infer freshness from a fixed payload field shared by all
+   collectors.
+
+    For API response and task behavior, see xref:ref-analytics-api-reference[Analytics API reference].
+
+. Evaluate the collection timing comparison and take the appropriate action.
+
+   * If `finished_at` or `last_collect` is at or after the expected window close time, the collection cycle completed successfully and data is current.
+   * If the collection timing predates the expected window close time, the collection cycle has not yet completed. Wait for the current collection window to finish, or trigger collection manually.
+
+.Result
+
+The collection timing comparison tells you whether the most recent collection cycle has completed. If data is current, `finished_at` or `last_collect` is at or after the expected collection window close time. If data is stale, use the recovery steps in the post-requisite section.
+
+.Post-requisites
+
+If data appears stale after the expected collection time, inspect the task
+status for an on-demand request or wait for the scheduled task to complete.
+System Administrators can retry collection with the collector's `/collect/`
+endpoint. There is no API backfill-status endpoint; see xref:ref-analytics-api-reference[Analytics API reference]
+and xref:ref-analytics-api-error-handling-and-resilience[Analytics API error handling and resilience] for recovery guidance.

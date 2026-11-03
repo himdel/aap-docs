@@ -1,0 +1,24 @@
+:_mod-docs-content-type: ASSEMBLY
+
+[id="assembly-analytics-api"]
+
+= Analytics API
+
+[role="_abstract"]
+This assembly describes the architecture, configuration, collection behavior, and API used to retrieve Automation Analytics data.
+
+include::analytics/con-understand-metrics-service-architecture.adoc[leveloffset=+1]
+
+include::analytics/con-understand-analytics-api-data-model-and-retention.adoc[leveloffset=+1]
+
+include::analytics/proc-connect-a-bi-tool-to-the-analytics-api.adoc[leveloffset=+1]
+
+include::analytics/ref-analytics-api-reference.adoc[leveloffset=+1]
+
+include::analytics/con-analytics-api-bi-integration-patterns.adoc[leveloffset=+1]
+
+include::analytics/proc-verify-analytics-data-freshness-using-timestamp-fields.adoc[leveloffset=+1]
+
+include::analytics/ref-analytics-api-error-handling-and-resilience.adoc[leveloffset=+1]
+
+include::platform/ref-controller-data-collection-details.adoc[leveloffset=+1]

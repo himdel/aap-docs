@@ -1,0 +1,47 @@
+# Markdown to AsciiDoc migration
+
+`md_to_adoc.py` converts an exported ANSTRAT Markdown state into the existing
+`analytics` title. It uses the bundle's top-level ToC to decide which topics
+belong in the generated API assembly, while retaining unlisted source topics
+as reusable generated files. It applies the repository's modular document headers,
+AsciiDoc attributes, IDs, cross-references, and title/assembly includes.
+The Markdown topics with AAP counterparts are converted into managed files.
+The pre-existing legacy `assembly-data-dictionary.adoc` is preserved, while
+the metrics-service dictionary is generated as a separate assembly. The
+generated topics currently include:
+
+- `assembly-metrics-service-data-dictionary.adoc`
+- `proc-controller-configure-analytics.adoc`
+- `ref-controller-analytics-gathering.adoc`
+- `ref-controller-data-collection-details.adoc`
+
+Review-only `SME Queries` sections are intentionally omitted from generated
+customer content. The source Markdown remains the review record.
+
+## Review-only tooling
+
+This converter, its configuration, and its managed manifest are review-bundle
+tooling for the ANSTRAT-1587 feature branch. They are not product
+documentation and should not be merged into the canonical `ansible/aap-docs`
+tree. Use them from this review checkout to regenerate the managed AsciiDoc
+files from the sibling Markdown source.
+
+## Convert a state
+
+From the repository root:
+
+```sh
+python3 tools/md_to_adoc.py --source ../markdown
+```
+
+For a historical state, point `--source` at a directory exported from the
+Markdown repository, for example:
+
+```sh
+git -C ../markdown archive fef3cc1 | tar -x -C /tmp/anstrat-baseline
+python3 tools/md_to_adoc.py --source /tmp/anstrat-baseline
+```
+
+The managed manifest permits later runs to remove only generated files that
+disappeared from the source state. It never cleans unrelated AAP documentation.
+Commit each converted state separately when preserving review history.
